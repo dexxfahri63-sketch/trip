@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "TripPackage": {
+      "title": "TripPackage",
+      "description": "Open trip expedition or tour package available in the catalog.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "destination": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "region": { "type": "string", "maxLength": 160 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "durationDays": { "type": "number" },
+        "durationLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "pricePerPerson": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "difficulty": { "type": "string", "enum": ["Santai", "Menengah", "Menantang"] },
+        "maxParticipants": { "type": "number" },
+        "nextDepartures": { "type": "array" },
+        "featured": { "type": "boolean" },
+        "shortDescription": { "type": "string", "maxLength": 2000 },
+        "coverImage": { "type": "string", "maxLength": 450000 },
+        "galleryImages": { "type": "array" },
+        "meetingPoint": { "type": "object" },
+        "included": { "type": "array" },
+        "excluded": { "type": "array" },
+        "itinerary": { "type": "array" }
+      },
+      "required": ["id", "title", "destination", "category", "durationDays", "pricePerPerson"]
+    },
+    "TourGuide": {
+      "title": "TourGuide",
+      "description": "Certified tour guide profile.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "specialty": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "certification": { "type": "string", "maxLength": 240 },
+        "experienceYears": { "type": "number" },
+        "tripsLed": { "type": "number" },
+        "bio": { "type": "string", "maxLength": 1500 }
+      },
+      "required": ["id", "name", "specialty"]
+    },
+    "GalleryItem": {
+      "title": "GalleryItem",
+      "description": "Field expedition photo or video reel documentation assigned to a guide.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "caption": { "type": "string", "maxLength": 1500 },
+        "destination": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "guideId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "guideName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "mediaType": { "type": "string", "enum": ["photo", "video"] },
+        "mediaUrl": { "type": "string", "maxLength": 450000 },
+        "capturedDate": { "type": "string", "maxLength": 40 },
+        "aspectHint": { "type": "string", "enum": ["portrait", "landscape", "square"] }
+      },
+      "required": ["id", "title", "destination", "guideId", "mediaType", "mediaUrl"]
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "Verified customer review displayed on the landing page.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "maxLength": 160 },
+        "tripName": { "type": "string", "maxLength": 200 },
+        "rating": { "type": "number" },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "date": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "name", "quote", "rating"]
+    },
+    "LandingSettings": {
+      "title": "LandingSettings",
+      "description": "Hero banner, promo strip, and WhatsApp contact settings.",
+      "type": "object",
+      "properties": {
+        "heroHeadline": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "heroSubheadline": { "type": "string", "maxLength": 600 },
+        "heroImage": { "type": "string", "maxLength": 450000 },
+        "heroCtaText": { "type": "string", "maxLength": 100 },
+        "promoActive": { "type": "boolean" },
+        "promoBadge": { "type": "string", "maxLength": 100 },
+        "promoText": { "type": "string", "maxLength": 300 },
+        "promoCode": { "type": "string", "maxLength": 60 },
+        "whatsappNumber": { "type": "string", "minLength": 6, "maxLength": 30 }
+      },
+      "required": ["heroHeadline", "whatsappNumber", "promoActive"]
+    },
+    "SiteContent": {
+      "title": "SiteContent",
+      "description": "Dynamic copy, navigation labels, catalog ranges, why-choose-us items, and basecamp contacts.",
+      "type": "object",
+      "properties": {
+        "brandName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "headerCtaText": { "type": "string", "maxLength": 80 },
+        "navHomeLabel": { "type": "string", "maxLength": 60 },
+        "navCatalogLabel": { "type": "string", "maxLength": 60 },
+        "navGalleryLabel": { "type": "string", "maxLength": 60 },
+        "navWhyLabel": { "type": "string", "maxLength": 60 },
+        "tripCategories": { "type": "array" },
+        "priceRanges": { "type": "array" },
+        "durationRanges": { "type": "array" },
+        "whyMetrics": { "type": "array" },
+        "whyItems": { "type": "array" },
+        "basecampAddress": { "type": "string", "maxLength": 300 },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "copyrightText": { "type": "string", "maxLength": 240 }
+      },
+      "required": ["brandName", "whyItems", "whyMetrics"]
+    },
+    "BookingLead": {
+      "title": "BookingLead",
+      "description": "Customer trip booking request containing PII, readable only by admins.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "tripId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "tripTitle": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "customerName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "whatsapp": { "type": "string", "minLength": 8, "maxLength": 30 },
+        "email": { "type": "string", "maxLength": 120 },
+        "departureDate": { "type": "string", "maxLength": 40 },
+        "participants": { "type": "number" },
+        "totalEstimatedPrice": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Baru", "Dihubungi", "Confirmed", "Selesai", "Dibatalkan"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "tripId", "tripTitle", "customerName", "whatsapp", "participants", "status", "createdAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Trusted administrator marker document keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 160 },
+        "role": { "type": "string", "enum": ["admin"] }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/trips/{tripId}": {
+      "schema": { "$ref": "#/entities/TripPackage" },
+      "description": "Publicly readable catalog of open trip packages managed by admins."
+    },
+    "/guides/{guideId}": {
+      "schema": { "$ref": "#/entities/TourGuide" },
+      "description": "Publicly readable roster of certified tour guides."
+    },
+    "/gallery/{galleryId}": {
+      "schema": { "$ref": "#/entities/GalleryItem" },
+      "description": "Publicly readable tour guide field documentation photos and video reels."
+    },
+    "/testimonials/{testimonialId}": {
+      "schema": { "$ref": "#/entities/Testimonial" },
+      "description": "Publicly readable customer testimonials displayed on landing page."
+    },
+    "/siteSettings/landing": {
+      "schema": { "$ref": "#/entities/LandingSettings" },
+      "description": "Public hero visual, headline, promo strip, and WhatsApp configuration."
+    },
+    "/siteSettings/content": {
+      "schema": { "$ref": "#/entities/SiteContent" },
+      "description": "Public site copy, navigation labels, dynamic priceRanges, durationRanges, whyItems, and basecamp info."
+    },
+    "/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/BookingLead" },
+      "description": "Customer booking inquiries with PII restricted exclusively to admins for read, update, and delete."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Trusted admin UID allowlist documents."
+    }
+  }
+}

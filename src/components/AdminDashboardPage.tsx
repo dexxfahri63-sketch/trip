@@ -4,6 +4,7 @@ import {
   Award,
   Camera,
   Check,
+  Cloud,
   Download,
   Edit3,
   FileText,
@@ -14,6 +15,7 @@ import {
   Map as MapIcon,
   MessageCircle,
   Plus,
+  RefreshCw,
   Search,
   Star,
   Trash2,
@@ -47,6 +49,23 @@ import {
   slugifyTripTitle,
   validatePinChangeInput,
 } from '../utils/tripLogic';
+import { FIREBASE_PROJECT_ID } from '../lib/firebase';
+import {
+  deleteGalleryItemFromFirestore,
+  deleteGuideFromFirestore,
+  deleteLeadFromFirestore,
+  deleteTestimonialFromFirestore,
+  deleteTripFromFirestore,
+  formatFirestoreQuotaNotice,
+  saveGalleryItemToFirestore,
+  saveGuideToFirestore,
+  saveLandingToFirestore,
+  saveSiteContentToFirestore,
+  saveTestimonialToFirestore,
+  saveTripToFirestore,
+  seedStoreToFirestore,
+  updateLeadStatusInFirestore,
+} from '../services/firestoreStore';
 import { ResilientImage } from './ResilientImage';
 
 function normalizeSiteContentDraft(sc: SiteContent): SiteContent {
@@ -73,14 +92,14 @@ function readImageAsDataUrl(file: File): Promise<string> {
         reject(new Error('File gambar kosong.'));
         return;
       }
-      // Compress large raster photos (> 700 KB) to keep JSON store responsive
-      if (file.size <= 700 * 1024 || file.type === 'image/svg+xml') {
+      // Compress raster photos (> 200 KB) so documents stay safely under Firestore 1 MB / 450 KB rule limits
+      if (file.size <= 200 * 1024 || file.type === 'image/svg+xml') {
         resolve(rawUrl);
         return;
       }
       const img = new Image();
       img.onload = () => {
-        const maxDim = 1600;
+        const maxDim = 1280;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width >= height) {
@@ -100,7 +119,11 @@ function readImageAsDataUrl(file: File): Promise<string> {
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
+        let compressed = canvas.toDataURL('image/jpeg', 0.78);
+        if (compressed.length > 430000) {
+          compressed = canvas.toDataURL('image/jpeg', 0.62);
+        }
+        resolve(compressed);
       };
       img.onerror = () => resolve(rawUrl);
       img.src = rawUrl;
@@ -121,6 +144,9 @@ type AdminTab =
 interface AdminDashboardPageProps {
   store: StoreDatabase;
   adminToken: string;
+  isFirebaseAdmin: boolean;
+  firebaseEmail: string | null;
+  onConnectGoogleAdmin: () => Promise<void>;
   onExitAdmin: () => void;
   onLogout: () => void;
   onAuthExpired: () => void;
@@ -146,6 +172,9 @@ const STATUS_STYLE: Record<LeadStatus, string> = {
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   store,
   adminToken,
+  isFirebaseAdmin,
+  firebaseEmail,
+  onConnectGoogleAdmin,
   onExitAdmin,
   onLogout,
   onAuthExpired,
@@ -154,6 +183,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [activeTab, setActiveTab] = useState<AdminTab>('leads');
   const [notice, setNotice] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [syncingFirebase, setSyncingFirebase] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
 
   // Leads filters
   const [leadSearch, setLeadSearch] = useState('');
@@ -220,8 +251,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     throw new Error(errBody.error || fallbackMsg);
   };
 
-  // Load private leads list when Admin Dashboard opens
+  // Load private leads list from local server when PIN token is present
   useEffect(() => {
+    if (!adminToken) return;
     let active = true;
     fetch('/api/leads', { headers: { 'x-admin-token': adminToken } })
       .then(async (res) => {
@@ -233,7 +265,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         return res.json() as Promise<BookingLead[]>;
       })
       .then((leads) => {
-        if (active && leads) {
+        if (active && leads && !isFirebaseAdmin) {
           onStoreChange({ ...store, leads });
         }
       })
@@ -242,7 +274,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminToken]);
+  }, [adminToken, isFirebaseAdmin]);
 
   const showToast = (msg: string) => {
     setErrorMsg('');
@@ -253,6 +285,44 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const showError = (msg: string) => {
     setNotice('');
     setErrorMsg(msg);
+  };
+
+  const extractErrorMessage = (err: unknown, fallback: string) => {
+    const quota = formatFirestoreQuotaNotice(err);
+    if (quota) return quota;
+    return err instanceof Error ? err.message : fallback;
+  };
+
+  const handleConnectGoogleClick = async () => {
+    setConnectingGoogle(true);
+    setErrorMsg('');
+    try {
+      await onConnectGoogleAdmin();
+      showToast(`Terhubung ke Google Admin. Sinkronisasi Cloud Firestore (${FIREBASE_PROJECT_ID}) aktif.`);
+    } catch (err) {
+      const msg = extractErrorMessage(err, 'Gagal menghubungkan akun Google Admin.');
+      if (!msg.includes('popup-closed-by-user')) {
+        showError(msg);
+      }
+    } finally {
+      setConnectingGoogle(false);
+    }
+  };
+
+  const handleSyncAllToFirebase = async () => {
+    if (!isFirebaseAdmin) {
+      await handleConnectGoogleClick();
+      return;
+    }
+    setSyncingFirebase(true);
+    try {
+      await seedStoreToFirestore(store);
+      showToast(`Seluruh katalog, galeri, guide, testimoni & pengaturan disinkronkan ke Firebase (${FIREBASE_PROJECT_ID}).`);
+    } catch (err) {
+      showError(extractErrorMessage(err, 'Gagal menyinkronkan data ke Firebase.'));
+    } finally {
+      setSyncingFirebase(false);
+    }
   };
 
   // --- LEADS HANDLERS ---
@@ -270,37 +340,57 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   const handleUpdateLeadStatus = async (leadId: string, status: LeadStatus) => {
     try {
-      const res = await fetch(`/api/leads/${leadId}`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal memperbarui status pesanan.');
-      const updated = (await res.json()) as BookingLead;
+      if (isFirebaseAdmin) {
+        await updateLeadStatusInFirestore(leadId, status);
+      }
+      let updatedLead = store.leads.find((l) => l.id === leadId);
+      if (adminToken) {
+        const res = await fetch(`/api/leads/${leadId}`, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal memperbarui status pesanan.');
+        } else if (res.ok) {
+          updatedLead = (await res.json()) as BookingLead;
+        }
+      }
       onStoreChange({
         ...store,
-        leads: store.leads.map((l) => (l.id === leadId ? updated : l)),
+        leads: store.leads.map((l) =>
+          l.id === leadId ? { ...(updatedLead || l), status } : l
+        ),
       });
-      showToast(`Status pesanan ${updated.customerName} diubah ke ${status}.`);
+      showToast(
+        `Status pesanan ${updatedLead?.customerName || leadId} diubah ke ${status}.`
+      );
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal memperbarui status.');
+      showError(extractErrorMessage(err, 'Gagal memperbarui status.'));
     }
   };
 
   const handleDeleteLead = async (leadId: string) => {
     try {
-      const res = await fetch(`/api/leads/${leadId}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-token': adminToken },
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menghapus pesanan.');
+      if (isFirebaseAdmin) {
+        await deleteLeadFromFirestore(leadId);
+      }
+      if (adminToken) {
+        const res = await fetch(`/api/leads/${leadId}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-token': adminToken },
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menghapus pesanan.');
+        }
+      }
       onStoreChange({
         ...store,
         leads: store.leads.filter((l) => l.id !== leadId),
       });
       showToast('Data pesanan dihapus.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menghapus data.');
+      showError(extractErrorMessage(err, 'Gagal menghapus data.'));
     }
   };
 
@@ -452,19 +542,28 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         ...store.siteContent,
         tripCategories: nextCategories,
       };
-      const res = await fetch('/api/site-content', {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify(nextSiteContent),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menambahkan kategori.');
-      const saved = (await res.json()) as SiteContent;
+      let saved: SiteContent = nextSiteContent;
+      if (isFirebaseAdmin) {
+        saved = await saveSiteContentToFirestore(nextSiteContent);
+      }
+      if (adminToken) {
+        const res = await fetch('/api/site-content', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menambahkan kategori.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as SiteContent;
+        }
+      }
       onStoreChange({ ...store, siteContent: saved });
       setSiteDraft(normalizeSiteContentDraft(saved));
       setNewCategoryInput('');
       showToast(`Kategori "${clean}" ditambahkan ke daftar.`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan kategori.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan kategori.'));
     } finally {
       setSavingCategories(false);
     }
@@ -493,18 +592,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         ...store.siteContent,
         tripCategories: nextCategories,
       };
-      const res = await fetch('/api/site-content', {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify(nextSiteContent),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menghapus kategori.');
-      const saved = (await res.json()) as SiteContent;
+      let saved: SiteContent = nextSiteContent;
+      if (isFirebaseAdmin) {
+        saved = await saveSiteContentToFirestore(nextSiteContent);
+      }
+      if (adminToken) {
+        const res = await fetch('/api/site-content', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menghapus kategori.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as SiteContent;
+        }
+      }
       onStoreChange({ ...store, siteContent: saved });
       setSiteDraft(normalizeSiteContentDraft(saved));
       showToast(`Kategori "${catToRemove}" dihapus.`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menghapus kategori.');
+      showError(extractErrorMessage(err, 'Gagal menghapus kategori.'));
     } finally {
       setSavingCategories(false);
     }
@@ -531,8 +639,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           ? [coverUrl]
           : [];
 
+    const tripId = isNewTrip ? editingTrip.id || `trip-${Date.now()}` : editingTrip.id;
     const payload: TripPackage = {
       ...editingTrip,
+      id: tripId,
       category: finalCategory,
       coverImage: coverUrl,
       slug: editingTrip.slug || slugifyTripTitle(editingTrip.title),
@@ -540,17 +650,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     };
 
     try {
-      const url = isNewTrip ? '/api/trips' : `/api/trips/${editingTrip.id}`;
-      const method = isNewTrip ? 'POST' : 'PUT';
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menyimpan paket trip.');
-      const saved = (await res.json()) as TripPackage;
+      let saved: TripPackage = payload;
+      if (isFirebaseAdmin) {
+        saved = await saveTripToFirestore(payload);
+      }
+      if (adminToken) {
+        const url = isNewTrip ? '/api/trips' : `/api/trips/${tripId}`;
+        const method = isNewTrip ? 'POST' : 'PUT';
+        const res = await fetch(url, {
+          method,
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menyimpan paket trip.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as TripPackage;
+        }
+      }
+
       const nextTrips = isNewTrip
-        ? [saved, ...store.trips]
+        ? [saved, ...store.trips.filter((t) => t.id !== saved.id)]
         : store.trips.map((t) => (t.id === saved.id ? saved : t));
 
       const currentCats = store.siteContent.tripCategories || availableCategories;
@@ -564,6 +684,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             tripCategories: [...currentCats, saved.category],
           };
 
+      if (!hasCat && isFirebaseAdmin) {
+        await saveSiteContentToFirestore(nextSiteContent);
+      }
+
       onStoreChange({ ...store, trips: nextTrips, siteContent: nextSiteContent });
       setSiteDraft(nextSiteContent);
       setEditingTrip(null);
@@ -573,43 +697,60 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           : `Paket "${saved.title}" diperbarui.`
       );
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan paket.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan paket.'));
     }
   };
 
   const handleToggleFeaturedTrip = async (trip: TripPackage) => {
     try {
-      const res = await fetch(`/api/trips/${trip.id}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({ featured: !trip.featured }),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal memperbarui status populer.');
-      const saved = (await res.json()) as TripPackage;
+      const updatedPayload: TripPackage = { ...trip, featured: !trip.featured };
+      let saved: TripPackage = updatedPayload;
+      if (isFirebaseAdmin) {
+        saved = await saveTripToFirestore(updatedPayload);
+      }
+      if (adminToken) {
+        const res = await fetch(`/api/trips/${trip.id}`, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ featured: !trip.featured }),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal memperbarui status populer.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as TripPackage;
+        }
+      }
       onStoreChange({
         ...store,
         trips: store.trips.map((t) => (t.id === saved.id ? saved : t)),
       });
       showToast(`Status populer "${saved.title}" diperbarui.`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal memperbarui.');
+      showError(extractErrorMessage(err, 'Gagal memperbarui.'));
     }
   };
 
   const handleDeleteTrip = async (trip: TripPackage) => {
     try {
-      const res = await fetch(`/api/trips/${trip.id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-token': adminToken },
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menghapus paket trip.');
+      if (isFirebaseAdmin) {
+        await deleteTripFromFirestore(trip.id);
+      }
+      if (adminToken) {
+        const res = await fetch(`/api/trips/${trip.id}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-token': adminToken },
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menghapus paket trip.');
+        }
+      }
       onStoreChange({
         ...store,
         trips: store.trips.filter((t) => t.id !== trip.id),
       });
       showToast(`Paket "${trip.title}" dihapus dari katalog.`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menghapus.');
+      showError(extractErrorMessage(err, 'Gagal menghapus.'));
     }
   };
 
@@ -659,50 +800,80 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
 
     try {
-      const url = editingGalleryId
-        ? `/api/gallery/${editingGalleryId}`
-        : '/api/gallery';
-      const method = editingGalleryId ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders(),
-        body: JSON.stringify({
-          title: galTitle,
-          caption: galCaption,
-          destination: galDestination,
-          guideId: galGuideId,
-          mediaType: galMediaType,
-          mediaUrl: galMediaUrl,
-          aspectHint: galAspect,
-        }),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menyimpan dokumentasi galeri.');
-      const saved = (await res.json()) as GalleryItem;
+      const existing = editingGalleryId
+        ? store.gallery.find((g) => g.id === editingGalleryId)
+        : undefined;
+      const guide = store.guides.find((g) => g.id === galGuideId);
+      const galId = editingGalleryId || `gal-${Date.now()}`;
+      const payload: GalleryItem = {
+        id: galId,
+        title: galTitle.trim(),
+        caption: galCaption.trim(),
+        destination: galDestination.trim(),
+        guideId: galGuideId,
+        guideName: guide?.name || existing?.guideName || 'Tim Guide DexxDigital',
+        mediaType: galMediaType,
+        mediaUrl:
+          galMediaUrl ||
+          existing?.mediaUrl ||
+          '/src/assets/images/guide_action_summit_1794756902427.jpg',
+        capturedDate: existing?.capturedDate || new Date().toISOString().slice(0, 10),
+        aspectHint: galAspect,
+      };
+
+      let saved: GalleryItem = payload;
+      if (isFirebaseAdmin) {
+        saved = await saveGalleryItemToFirestore(payload);
+      }
+      if (adminToken) {
+        const url = editingGalleryId
+          ? `/api/gallery/${editingGalleryId}`
+          : '/api/gallery';
+        const method = editingGalleryId ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method,
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menyimpan dokumentasi galeri.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as GalleryItem;
+        }
+      }
+
       const nextGallery = editingGalleryId
         ? store.gallery.map((g) => (g.id === saved.id ? saved : g))
-        : [saved, ...store.gallery];
+        : [saved, ...store.gallery.filter((g) => g.id !== saved.id)];
       onStoreChange({ ...store, gallery: nextGallery });
       setGalleryFormOpen(false);
       showToast('Dokumentasi galeri berhasil disimpan.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan galeri.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan galeri.'));
     }
   };
 
   const handleDeleteGallery = async (id: string) => {
     try {
-      const res = await fetch(`/api/gallery/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-token': adminToken },
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menghapus item galeri.');
+      if (isFirebaseAdmin) {
+        await deleteGalleryItemFromFirestore(id);
+      }
+      if (adminToken) {
+        const res = await fetch(`/api/gallery/${id}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-token': adminToken },
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menghapus item galeri.');
+        }
+      }
       onStoreChange({
         ...store,
         gallery: store.gallery.filter((g) => g.id !== id),
       });
       showToast('Dokumentasi galeri dihapus.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menghapus.');
+      showError(extractErrorMessage(err, 'Gagal menghapus.'));
     }
   };
 
@@ -728,44 +899,77 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
     try {
       const isNew = !editingGuide.id;
-      const url = isNew ? '/api/guides' : `/api/guides/${editingGuide.id}`;
-      const method = isNew ? 'POST' : 'PUT';
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders(),
-        body: JSON.stringify(editingGuide),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menyimpan Tour Guide.');
-      const saved = (await res.json()) as TourGuide;
+      const guideId = isNew ? `guide-${Date.now()}` : editingGuide.id;
+      const payload: TourGuide = {
+        ...editingGuide,
+        id: guideId,
+        name: editingGuide.name.trim(),
+        specialty: editingGuide.specialty.trim(),
+        certification: (editingGuide.certification || 'Sertifikasi Resmi HPI/APGI').trim(),
+      };
+
+      let saved: TourGuide = payload;
+      if (isFirebaseAdmin) {
+        saved = await saveGuideToFirestore(payload);
+      }
+      if (adminToken) {
+        const url = isNew ? '/api/guides' : `/api/guides/${guideId}`;
+        const method = isNew ? 'POST' : 'PUT';
+        const res = await fetch(url, {
+          method,
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menyimpan Tour Guide.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as TourGuide;
+        }
+      }
+
       const nextGuides = isNew
         ? [...store.guides, saved]
         : store.guides.map((g) => (g.id === saved.id ? saved : g));
       const nextGallery = store.gallery.map((item) =>
         item.guideId === saved.id ? { ...item, guideName: saved.name } : item
       );
+      if (isFirebaseAdmin) {
+        for (const item of nextGallery) {
+          if (item.guideId === saved.id) {
+            await saveGalleryItemToFirestore(item);
+          }
+        }
+      }
       onStoreChange({ ...store, guides: nextGuides, gallery: nextGallery });
       setGuideFormOpen(false);
       setEditingGuide(null);
       showToast(`Profil Tour Guide "${saved.name}" disimpan.`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan Tour Guide.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan Tour Guide.'));
     }
   };
 
   const handleDeleteGuide = async (id: string) => {
     try {
-      const res = await fetch(`/api/guides/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-token': adminToken },
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menghapus Tour Guide.');
+      if (isFirebaseAdmin) {
+        await deleteGuideFromFirestore(id);
+      }
+      if (adminToken) {
+        const res = await fetch(`/api/guides/${id}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-token': adminToken },
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menghapus Tour Guide.');
+        }
+      }
       onStoreChange({
         ...store,
         guides: store.guides.filter((g) => g.id !== id),
       });
       showToast('Profil Tour Guide dihapus.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menghapus.');
+      showError(extractErrorMessage(err, 'Gagal menghapus.'));
     }
   };
 
@@ -790,43 +994,68 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
     try {
       const isNew = !editingTesti.id;
-      const url = isNew
-        ? '/api/testimonials'
-        : `/api/testimonials/${editingTesti.id}`;
-      const method = isNew ? 'POST' : 'PUT';
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders(),
-        body: JSON.stringify(editingTesti),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menyimpan testimoni.');
-      const saved = (await res.json()) as Testimonial;
+      const testiId = isNew ? `testi-${Date.now()}` : editingTesti.id;
+      const payload: Testimonial = {
+        ...editingTesti,
+        id: testiId,
+        name: editingTesti.name.trim(),
+        role: (editingTesti.role || 'Peserta Open Trip').trim(),
+        tripName: (editingTesti.tripName || 'Open Trip Nusantara').trim(),
+        quote: editingTesti.quote.trim(),
+      };
+
+      let saved: Testimonial = payload;
+      if (isFirebaseAdmin) {
+        saved = await saveTestimonialToFirestore(payload);
+      }
+      if (adminToken) {
+        const url = isNew ? '/api/testimonials' : `/api/testimonials/${testiId}`;
+        const method = isNew ? 'POST' : 'PUT';
+        const res = await fetch(url, {
+          method,
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menyimpan testimoni.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as Testimonial;
+        }
+      }
+
       const nextTesti = isNew
-        ? [saved, ...store.testimonials]
+        ? [saved, ...store.testimonials.filter((t) => t.id !== saved.id)]
         : store.testimonials.map((t) => (t.id === saved.id ? saved : t));
       onStoreChange({ ...store, testimonials: nextTesti });
       setTestiFormOpen(false);
       setEditingTesti(null);
       showToast(`Testimoni dari "${saved.name}" disimpan.`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan testimoni.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan testimoni.'));
     }
   };
 
   const handleDeleteTesti = async (id: string) => {
     try {
-      const res = await fetch(`/api/testimonials/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-token': adminToken },
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menghapus testimoni.');
+      if (isFirebaseAdmin) {
+        await deleteTestimonialFromFirestore(id);
+      }
+      if (adminToken) {
+        const res = await fetch(`/api/testimonials/${id}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-token': adminToken },
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menghapus testimoni.');
+        }
+      }
       onStoreChange({
         ...store,
         testimonials: store.testimonials.filter((t) => t.id !== id),
       });
       showToast('Testimoni dihapus.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menghapus.');
+      showError(extractErrorMessage(err, 'Gagal menghapus.'));
     }
   };
 
@@ -835,17 +1064,26 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     e.preventDefault();
     setSavingLanding(true);
     try {
-      const res = await fetch('/api/landing', {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify(landingDraft),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menyimpan pengaturan banner.');
-      const saved = (await res.json()) as LandingSettings;
+      let saved: LandingSettings = landingDraft;
+      if (isFirebaseAdmin) {
+        saved = await saveLandingToFirestore(landingDraft);
+      }
+      if (adminToken) {
+        const res = await fetch('/api/landing', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menyimpan pengaturan banner.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as LandingSettings;
+        }
+      }
       onStoreChange({ ...store, landing: saved });
       showToast('Pengaturan Hero & Banner Promosi disimpan.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan.'));
     } finally {
       setSavingLanding(false);
     }
@@ -883,18 +1121,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         priceRanges: cleanedPriceRanges,
         durationRanges: cleanedDurationRanges,
       };
-      const res = await fetch('/api/site-content', {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) await handleFetchError(res, 'Gagal menyimpan konten website.');
-      const saved = (await res.json()) as SiteContent;
+      let saved: SiteContent = payload;
+      if (isFirebaseAdmin) {
+        saved = await saveSiteContentToFirestore(payload);
+      }
+      if (adminToken) {
+        const res = await fetch('/api/site-content', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(saved),
+        });
+        if (!res.ok && !isFirebaseAdmin) {
+          await handleFetchError(res, 'Gagal menyimpan konten website.');
+        } else if (res.ok && !isFirebaseAdmin) {
+          saved = (await res.json()) as SiteContent;
+        }
+      }
       onStoreChange({ ...store, siteContent: saved });
       setSiteDraft(normalizeSiteContentDraft(saved));
       showToast('Seluruh teks web, katalog, rentang harga, durasi & kontak diperbarui.');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Gagal menyimpan konten.');
+      showError(extractErrorMessage(err, 'Gagal menyimpan konten.'));
     } finally {
       setSavingSite(false);
     }
@@ -1110,7 +1357,40 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             <h1 className="text-xl font-bold text-[#17231D] mt-0.5">{tabTitles[activeTab]}</h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isFirebaseAdmin ? (
+              <button
+                type="button"
+                onClick={handleSyncAllToFirebase}
+                disabled={syncingFirebase}
+                title={`Terhubung sebagai ${firebaseEmail || 'Admin Google'} (${FIREBASE_PROJECT_ID})`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-[#1B3B2B] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-60"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${syncingFirebase ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+                <span>
+                  {syncingFirebase
+                    ? 'Menyinkronkan...'
+                    : `Sinkronkan Semua ke Firebase (${FIREBASE_PROJECT_ID})`}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleConnectGoogleClick}
+                disabled={connectingGoogle}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-[#17231D] bg-[#F6F5F0] hover:bg-[#EDEBE4] border border-[#E2DFD5] rounded-lg cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-60"
+              >
+                <Cloud className="w-4 h-4 text-[#C85A32]" aria-hidden="true" />
+                <span>
+                  {connectingGoogle
+                    ? 'Menghubungkan Google...'
+                    : 'Hubungkan Google untuk Sync Firebase'}
+                </span>
+              </button>
+            )}
             {activeTab === 'leads' && (
               <button
                 type="button"
@@ -4116,11 +4396,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-[#E2DFD5] flex justify-end">
+              <div className="pt-3 border-t border-[#E2DFD5] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                {!adminToken && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Untuk mengubah kata sandi akses lokal, masuk terlebih dahulu menggunakan PIN/kata sandi saat ini.
+                  </p>
+                )}
                 <button
                   type="submit"
-                  disabled={savingPin}
-                  className="px-6 py-2.5 text-sm font-semibold text-white bg-[#1B3B2B] hover:bg-[#132A1E] rounded-lg transition-colors cursor-pointer"
+                  disabled={savingPin || !adminToken}
+                  className="px-6 py-2.5 text-sm font-semibold text-white bg-[#1B3B2B] hover:bg-[#132A1E] disabled:opacity-50 rounded-lg transition-colors cursor-pointer sm:ml-auto"
                 >
                   {savingPin ? 'Menyimpan...' : 'Perbarui PIN / Kata Sandi'}
                 </button>

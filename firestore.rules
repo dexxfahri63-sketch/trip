@@ -1,0 +1,313 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'dexxfahri63@gmail.com' &&
+         request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || isValidString(data[field], 0, maxLen);
+    }
+
+    function isValidTripPackage(data) {
+      return data.keys().hasAll([
+          'id', 'slug', 'title', 'destination', 'region', 'category',
+          'durationDays', 'durationLabel', 'pricePerPerson', 'rating',
+          'reviewCount', 'difficulty', 'maxParticipants', 'nextDepartures',
+          'featured', 'shortDescription', 'coverImage', 'galleryImages',
+          'meetingPoint', 'included', 'excluded', 'itinerary'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'slug', 'title', 'destination', 'region', 'category',
+          'durationDays', 'durationLabel', 'pricePerPerson', 'rating',
+          'reviewCount', 'difficulty', 'maxParticipants', 'nextDepartures',
+          'featured', 'shortDescription', 'coverImage', 'galleryImages',
+          'meetingPoint', 'included', 'excluded', 'itinerary'
+        ]) &&
+        isValidId(data.id) &&
+        isValidString(data.slug, 1, 160) &&
+        isValidString(data.title, 1, 200) &&
+        isValidString(data.destination, 1, 160) &&
+        isValidString(data.region, 0, 160) &&
+        isValidString(data.category, 1, 80) &&
+        data.durationDays is number && data.durationDays >= 1 && data.durationDays <= 60 &&
+        isValidString(data.durationLabel, 1, 80) &&
+        data.pricePerPerson is number && data.pricePerPerson >= 0 && data.pricePerPerson <= 500000000 &&
+        data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+        data.reviewCount is number && data.reviewCount >= 0 && data.reviewCount <= 100000 &&
+        data.difficulty in ['Santai', 'Menengah', 'Menantang'] &&
+        data.maxParticipants is number && data.maxParticipants >= 1 && data.maxParticipants <= 200 &&
+        data.nextDepartures is list && data.nextDepartures.size() <= 24 &&
+        (data.nextDepartures.size() == 0 || isValidString(data.nextDepartures[0], 1, 40)) &&
+        data.featured is bool &&
+        isValidString(data.shortDescription, 0, 2000) &&
+        isValidString(data.coverImage, 0, 450000) &&
+        data.galleryImages is list && data.galleryImages.size() <= 8 &&
+        (data.galleryImages.size() == 0 || isValidString(data.galleryImages[0], 0, 450000)) &&
+        data.meetingPoint is map &&
+        data.meetingPoint.keys().hasAll(['location', 'time', 'notes']) &&
+        data.meetingPoint.keys().hasOnly(['location', 'time', 'notes']) &&
+        isValidString(data.meetingPoint.location, 0, 240) &&
+        isValidString(data.meetingPoint.time, 0, 60) &&
+        isValidString(data.meetingPoint.notes, 0, 600) &&
+        data.included is list && data.included.size() <= 40 &&
+        (data.included.size() == 0 || isValidString(data.included[0], 0, 300)) &&
+        data.excluded is list && data.excluded.size() <= 40 &&
+        (data.excluded.size() == 0 || isValidString(data.excluded[0], 0, 300)) &&
+        data.itinerary is list && data.itinerary.size() <= 30;
+    }
+
+    function isValidTourGuide(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'specialty', 'certification',
+          'experienceYears', 'tripsLed', 'bio'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'specialty', 'certification',
+          'experienceYears', 'tripsLed', 'bio'
+        ]) &&
+        isValidId(data.id) &&
+        isValidString(data.name, 1, 120) &&
+        isValidString(data.specialty, 1, 200) &&
+        isValidString(data.certification, 0, 240) &&
+        data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80 &&
+        data.tripsLed is number && data.tripsLed >= 0 && data.tripsLed <= 10000 &&
+        isValidString(data.bio, 0, 1500);
+    }
+
+    function isValidGalleryItem(data) {
+      return data.keys().hasAll([
+          'id', 'title', 'caption', 'destination', 'guideId',
+          'guideName', 'mediaType', 'mediaUrl', 'capturedDate', 'aspectHint'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'title', 'caption', 'destination', 'guideId',
+          'guideName', 'mediaType', 'mediaUrl', 'capturedDate', 'aspectHint'
+        ]) &&
+        isValidId(data.id) &&
+        isValidString(data.title, 1, 200) &&
+        isValidString(data.caption, 0, 1500) &&
+        isValidString(data.destination, 1, 160) &&
+        isValidString(data.guideId, 1, 128) &&
+        isValidString(data.guideName, 1, 120) &&
+        data.mediaType in ['photo', 'video'] &&
+        isValidString(data.mediaUrl, 0, 450000) &&
+        isValidString(data.capturedDate, 0, 40) &&
+        data.aspectHint in ['portrait', 'landscape', 'square'];
+    }
+
+    function isValidTestimonial(data) {
+      return data.keys().hasAll(['id', 'name', 'role', 'tripName', 'rating', 'quote', 'date']) &&
+        data.keys().hasOnly(['id', 'name', 'role', 'tripName', 'rating', 'quote', 'date']) &&
+        isValidId(data.id) &&
+        isValidString(data.name, 1, 120) &&
+        isValidString(data.role, 0, 160) &&
+        isValidString(data.tripName, 0, 200) &&
+        data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+        isValidString(data.quote, 1, 1500) &&
+        isValidString(data.date, 0, 60);
+    }
+
+    function isValidLandingSettings(data) {
+      return data.keys().hasAll([
+          'heroHeadline', 'heroSubheadline', 'heroImage', 'heroCtaText',
+          'promoActive', 'promoBadge', 'promoText', 'promoCode', 'whatsappNumber'
+        ]) &&
+        data.keys().hasOnly([
+          'heroHeadline', 'heroSubheadline', 'heroImage', 'heroCtaText',
+          'promoActive', 'promoBadge', 'promoText', 'promoCode', 'whatsappNumber'
+        ]) &&
+        isValidString(data.heroHeadline, 1, 240) &&
+        isValidString(data.heroSubheadline, 0, 600) &&
+        isValidString(data.heroImage, 0, 450000) &&
+        isValidString(data.heroCtaText, 0, 100) &&
+        data.promoActive is bool &&
+        isValidString(data.promoBadge, 0, 100) &&
+        isValidString(data.promoText, 0, 300) &&
+        isValidString(data.promoCode, 0, 60) &&
+        isValidString(data.whatsappNumber, 6, 30);
+    }
+
+    function isValidSiteContent(data) {
+      return data.keys().hasAll([
+          'brandName', 'headerCtaText', 'heroKicker', 'heroSecondaryCtaText',
+          'popularKicker', 'popularTitle', 'whyKicker', 'whyTitle', 'whyDescription',
+          'whyMetrics', 'whyItems', 'testimonialsKicker', 'testimonialsTitle',
+          'bottomCtaTitle', 'bottomCtaSubtitle', 'bottomCtaButtonText',
+          'catalogKicker', 'catalogTitle', 'catalogSubtitle',
+          'galleryKicker', 'galleryTitle', 'gallerySubtitle',
+          'footerDescription', 'basecampAddress', 'contactEmail', 'copyrightText'
+        ]) &&
+        data.keys().hasOnly([
+          'brandName', 'headerCtaText', 'navHomeLabel', 'navCatalogLabel',
+          'navGalleryLabel', 'navWhyLabel', 'heroKicker', 'heroSecondaryCtaText',
+          'searchDestinationLabel', 'searchAllDestinationsLabel', 'searchDateLabel',
+          'searchDurationLabel', 'searchAllDurationsLabel', 'searchButtonText',
+          'popularKicker', 'popularTitle', 'popularViewAllText', 'popularPricePrefix',
+          'whyKicker', 'whyTitle', 'whyDescription', 'whyMetrics', 'whyItems',
+          'testimonialsKicker', 'testimonialsTitle', 'bottomCtaTitle',
+          'bottomCtaSubtitle', 'bottomCtaButtonText', 'catalogKicker', 'catalogTitle',
+          'catalogSubtitle', 'catalogAllCategoriesLabel', 'catalogSearchPlaceholder',
+          'catalogPriceFilterLabel', 'catalogAllPricesLabel', 'catalogDurationFilterLabel',
+          'catalogDateFilterLabel', 'catalogSortLabel', 'catalogCardPriceLabel',
+          'catalogCardButtonText', 'catalogEmptyTitle', 'catalogEmptySubtitle',
+          'priceRanges', 'durationRanges', 'detailBackText', 'detailSummaryTitle',
+          'detailItineraryTitle', 'detailFacilitiesTitle', 'detailIncludedTitle',
+          'detailExcludedTitle', 'detailMeetingPointTitle', 'detailBookingCtaText',
+          'detailWhatsappCtaText', 'galleryKicker', 'galleryTitle', 'gallerySubtitle',
+          'galleryGuidesTitle', 'galleryDestFilterLabel', 'galleryGuideFilterLabel',
+          'footerDescription', 'footerNavTitle', 'footerContactTitle',
+          'basecampAddress', 'contactEmail', 'copyrightText', 'tripCategories'
+        ]) &&
+        isValidString(data.brandName, 1, 120) &&
+        isValidString(data.headerCtaText, 1, 80) &&
+        isValidString(data.heroKicker, 0, 200) &&
+        isValidString(data.heroSecondaryCtaText, 0, 100) &&
+        isValidString(data.popularKicker, 0, 120) &&
+        isValidString(data.popularTitle, 0, 200) &&
+        isValidString(data.whyKicker, 0, 120) &&
+        isValidString(data.whyTitle, 0, 200) &&
+        isValidString(data.whyDescription, 0, 600) &&
+        isValidString(data.testimonialsKicker, 0, 120) &&
+        isValidString(data.testimonialsTitle, 0, 200) &&
+        isValidString(data.bottomCtaTitle, 0, 200) &&
+        isValidString(data.bottomCtaSubtitle, 0, 400) &&
+        isValidString(data.bottomCtaButtonText, 0, 100) &&
+        isValidString(data.catalogKicker, 0, 120) &&
+        isValidString(data.catalogTitle, 0, 200) &&
+        isValidString(data.catalogSubtitle, 0, 500) &&
+        isValidString(data.galleryKicker, 0, 120) &&
+        isValidString(data.galleryTitle, 0, 200) &&
+        isValidString(data.gallerySubtitle, 0, 500) &&
+        isValidString(data.footerDescription, 0, 500) &&
+        isValidString(data.basecampAddress, 0, 300) &&
+        isValidString(data.contactEmail, 0, 160) &&
+        isValidString(data.copyrightText, 0, 240) &&
+        isValidOptionalString(data, 'navHomeLabel', 60) &&
+        isValidOptionalString(data, 'navCatalogLabel', 60) &&
+        isValidOptionalString(data, 'navGalleryLabel', 60) &&
+        isValidOptionalString(data, 'navWhyLabel', 60) &&
+        data.whyMetrics is list && data.whyMetrics.size() <= 10 &&
+        data.whyItems is list && data.whyItems.size() <= 20 &&
+        (!('priceRanges' in data) || (data.priceRanges is list && data.priceRanges.size() <= 20)) &&
+        (!('durationRanges' in data) || (data.durationRanges is list && data.durationRanges.size() <= 20)) &&
+        (!('tripCategories' in data) || (data.tripCategories is list && data.tripCategories.size() <= 30));
+    }
+
+    function isValidLeadCreate(data) {
+      return data.keys().hasAll([
+          'id', 'tripId', 'tripTitle', 'customerName', 'whatsapp',
+          'email', 'departureDate', 'participants', 'totalEstimatedPrice',
+          'notes', 'status', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'tripId', 'tripTitle', 'customerName', 'whatsapp',
+          'email', 'departureDate', 'participants', 'totalEstimatedPrice',
+          'notes', 'status', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidString(data.tripId, 1, 128) &&
+        isValidString(data.tripTitle, 1, 200) &&
+        isValidString(data.customerName, 2, 120) &&
+        isValidString(data.whatsapp, 8, 30) &&
+        isValidString(data.email, 0, 120) &&
+        isValidString(data.departureDate, 0, 40) &&
+        data.participants is number && data.participants >= 1 && data.participants <= 30 &&
+        data.totalEstimatedPrice is number && data.totalEstimatedPrice >= 0 && data.totalEstimatedPrice <= 2000000000 &&
+        isValidString(data.notes, 0, 1000) &&
+        data.status == 'Baru' &&
+        data.createdAt == request.time;
+    }
+
+    function isValidLeadUpdate(data) {
+      return data.keys().hasAll([
+          'id', 'tripId', 'tripTitle', 'customerName', 'whatsapp',
+          'email', 'departureDate', 'participants', 'totalEstimatedPrice',
+          'notes', 'status', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'tripId', 'tripTitle', 'customerName', 'whatsapp',
+          'email', 'departureDate', 'participants', 'totalEstimatedPrice',
+          'notes', 'status', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.status in ['Baru', 'Dihubungi', 'Confirmed', 'Selesai', 'Dibatalkan'];
+    }
+
+    match /trips/{tripId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidId(tripId) && isValidTripPackage(incoming()) && incoming().id == tripId;
+      allow delete: if isAdmin() && isValidId(tripId);
+    }
+
+    match /guides/{guideId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidId(guideId) && isValidTourGuide(incoming()) && incoming().id == guideId;
+      allow delete: if isAdmin() && isValidId(guideId);
+    }
+
+    match /gallery/{galleryId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidId(galleryId) && isValidGalleryItem(incoming()) && incoming().id == galleryId;
+      allow delete: if isAdmin() && isValidId(galleryId);
+    }
+
+    match /testimonials/{testimonialId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidId(testimonialId) && isValidTestimonial(incoming()) && incoming().id == testimonialId;
+      allow delete: if isAdmin() && isValidId(testimonialId);
+    }
+
+    match /siteSettings/{settingId} {
+      allow get: if settingId in ['landing', 'content'];
+      allow create, update: if isAdmin() && (
+        (settingId == 'landing' && isValidLandingSettings(incoming())) ||
+        (settingId == 'content' && isValidSiteContent(incoming()))
+      );
+      allow delete: if false;
+    }
+
+    match /leads/{leadId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(leadId) && isValidLeadCreate(incoming()) && incoming().id == leadId;
+      allow update: if isAdmin() && isValidId(leadId) && isValidLeadUpdate(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(leadId);
+    }
+
+    match /admins/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
+    }
+  }
+}

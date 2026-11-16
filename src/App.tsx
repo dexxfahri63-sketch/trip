@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { MotionConfig } from 'motion/react';
 import type { BookingLead, StoreDatabase, TripPackage } from './types/trip';
 import { INITIAL_STORE_DATA } from './data/seedData';
 import type { TripFilterCriteria } from './utils/tripLogic';
+import {
+  ADMIN_EMAIL,
+  auth,
+  db,
+  googleProvider,
+  testFirestoreConnection,
+} from './lib/firebase';
+import {
+  isFirestoreStoreSeeded,
+  seedStoreToFirestore,
+  subscribeLeadsFromFirestore,
+  subscribePublicFirestoreStore,
+} from './services/firestoreStore';
 import { Navbar, type AppView } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { LandingPage } from './components/LandingPage';
@@ -14,11 +29,37 @@ import { AdminLoginGate } from './components/AdminLoginGate';
 
 const ADMIN_TOKEN_KEY = 'dexxdigital_admin_token';
 
+function mergeSiteContent(
+  base: StoreDatabase['siteContent'],
+  incoming?: Partial<StoreDatabase['siteContent']>
+): StoreDatabase['siteContent'] {
+  return {
+    ...base,
+    ...(incoming || {}),
+    priceRanges:
+      incoming?.priceRanges && incoming.priceRanges.length > 0
+        ? incoming.priceRanges
+        : base.priceRanges,
+    durationRanges:
+      incoming?.durationRanges && incoming.durationRanges.length > 0
+        ? incoming.durationRanges
+        : base.durationRanges,
+    tripCategories:
+      incoming?.tripCategories && incoming.tripCategories.length > 0
+        ? incoming.tripCategories
+        : base.tripCategories,
+  };
+}
+
 export default function App() {
   const [store, setStore] = useState<StoreDatabase>(INITIAL_STORE_DATA);
+  const storeRef = useRef<StoreDatabase>(INITIAL_STORE_DATA);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState<AppView>('landing');
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [isFirebaseAdmin, setIsFirebaseAdmin] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [adminToken, setAdminToken] = useState<string>(() => {
     try {
       return sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
@@ -39,7 +80,41 @@ export default function App() {
   const whySectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    storeRef.current = store;
+  }, [store]);
+
+  // 1. Test Firestore connectivity & track Firebase Auth readiness
+  useEffect(() => {
+    testFirestoreConnection().catch(() => {});
+
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      if (!user) {
+        setIsFirebaseAdmin(false);
+        setAuthReady(true);
+        return;
+      }
+
+      let adminOk = Boolean(user.emailVerified && user.email === ADMIN_EMAIL);
+      if (!adminOk) {
+        try {
+          const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+          adminOk = adminDoc.exists();
+        } catch {
+          adminOk = false;
+        }
+      }
+      setIsFirebaseAdmin(adminOk);
+      setAuthReady(true);
+    });
+
+    return () => unsubAuth();
+  }, []);
+
+  // 2. Load local fallback store + subscribe to real-time Cloud Firestore public collections
+  useEffect(() => {
     let active = true;
+
     fetch('/api/store')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load store');
@@ -47,23 +122,11 @@ export default function App() {
       })
       .then((data) => {
         if (active) {
-          setStore({
-            ...INITIAL_STORE_DATA,
+          setStore((prev) => ({
+            ...prev,
             ...data,
-            siteContent: {
-              ...INITIAL_STORE_DATA.siteContent,
-              ...(data.siteContent || {}),
-              priceRanges:
-                data.siteContent?.priceRanges && data.siteContent.priceRanges.length > 0
-                  ? data.siteContent.priceRanges
-                  : INITIAL_STORE_DATA.siteContent.priceRanges,
-              durationRanges:
-                data.siteContent?.durationRanges &&
-                data.siteContent.durationRanges.length > 0
-                  ? data.siteContent.durationRanges
-                  : INITIAL_STORE_DATA.siteContent.durationRanges,
-            },
-          });
+            siteContent: mergeSiteContent(INITIAL_STORE_DATA.siteContent, data.siteContent),
+          }));
         }
       })
       .catch(() => {
@@ -73,10 +136,56 @@ export default function App() {
         if (active) setLoading(false);
       });
 
+    const unsubPublic = subscribePublicFirestoreStore((patch) => {
+      if (!active) return;
+      setStore((prev) => ({
+        ...prev,
+        ...(patch.trips ? { trips: patch.trips } : {}),
+        ...(patch.guides ? { guides: patch.guides } : {}),
+        ...(patch.gallery ? { gallery: patch.gallery } : {}),
+        ...(patch.testimonials ? { testimonials: patch.testimonials } : {}),
+        ...(patch.landing ? { landing: { ...prev.landing, ...patch.landing } } : {}),
+        ...(patch.siteContent
+          ? {
+              siteContent: mergeSiteContent(
+                INITIAL_STORE_DATA.siteContent,
+                patch.siteContent
+              ),
+            }
+          : {}),
+      }));
+    });
+
     return () => {
       active = false;
+      unsubPublic();
     };
   }, []);
+
+  // 3. Auto-seed Firestore if empty once admin signs in with Google + listen to protected leads
+  useEffect(() => {
+    if (!authReady || !isFirebaseAdmin) return;
+
+    let active = true;
+    isFirestoreStoreSeeded()
+      .then(async (seeded) => {
+        if (active && !seeded) {
+          await seedStoreToFirestore(storeRef.current);
+        }
+      })
+      .catch(() => {});
+
+    const unsubLeads = subscribeLeadsFromFirestore((leads) => {
+      if (active) {
+        setStore((prev) => ({ ...prev, leads }));
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubLeads();
+    };
+  }, [authReady, isFirebaseAdmin]);
 
   useEffect(() => {
     if (store.siteContent.brandName) {
@@ -98,12 +207,41 @@ export default function App() {
     }
   };
 
+  const handleConnectGoogleAdmin = async () => {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    let allowed = Boolean(user.emailVerified && user.email === ADMIN_EMAIL);
+    if (!allowed) {
+      try {
+        const snap = await getDoc(doc(db, 'admins', user.uid));
+        allowed = snap.exists();
+      } catch {
+        allowed = false;
+      }
+    }
+    if (!allowed) {
+      await signOut(auth).catch(() => {});
+      throw new Error(
+        `Akun ${user.email || ''} bukan admin terdaftar (${ADMIN_EMAIL}).`
+      );
+    }
+    setFirebaseUser(user);
+    setIsFirebaseAdmin(true);
+    const seeded = await isFirestoreStoreSeeded().catch(() => false);
+    if (!seeded) {
+      await seedStoreToFirestore(storeRef.current);
+    }
+  };
+
   const handleAdminLogout = () => {
     if (adminToken) {
       fetch('/api/admin/logout', {
         method: 'POST',
         headers: { 'x-admin-token': adminToken },
       }).catch(() => {});
+    }
+    if (firebaseUser) {
+      signOut(auth).catch(() => {});
     }
     setAdminToken('');
     try {
@@ -148,20 +286,25 @@ export default function App() {
   const handleLeadSubmitted = (newLead: BookingLead) => {
     setStore((prev) => ({
       ...prev,
-      leads: [newLead, ...prev.leads],
+      leads: [newLead, ...prev.leads.filter((l) => l.id !== newLead.id)],
     }));
   };
 
   const selectedTrip =
     store.trips.find((t) => t.id === selectedTripId) || store.trips[0];
 
+  const isAdminUnlocked = Boolean(adminToken || isFirebaseAdmin);
+
   if (currentView === 'admin') {
-    if (!adminToken) {
+    if (!isAdminUnlocked) {
       return (
         <MotionConfig reducedMotion="user">
           <AdminLoginGate
             brandName={store.siteContent.brandName}
             onSuccess={handleAdminLoginSuccess}
+            onGoogleSuccess={() => {
+              setIsFirebaseAdmin(true);
+            }}
             onCancel={() => navigateTo('landing')}
           />
         </MotionConfig>
@@ -173,6 +316,9 @@ export default function App() {
         <AdminDashboardPage
           store={store}
           adminToken={adminToken}
+          isFirebaseAdmin={isFirebaseAdmin}
+          firebaseEmail={firebaseUser?.email || null}
+          onConnectGoogleAdmin={handleConnectGoogleAdmin}
           onExitAdmin={() => navigateTo('landing')}
           onLogout={handleAdminLogout}
           onAuthExpired={handleAuthExpired}

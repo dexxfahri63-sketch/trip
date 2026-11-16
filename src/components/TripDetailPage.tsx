@@ -21,6 +21,7 @@ import {
   formatIDR,
   validateBookingInput,
 } from '../utils/tripLogic';
+import { createLeadInFirestore } from '../services/firestoreStore';
 import { ResilientImage } from './ResilientImage';
 
 interface TripDetailPageProps {
@@ -90,10 +91,12 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const leadId = `lead-${Date.now()}`;
+      let created: BookingLead | null = null;
+
+      try {
+        created = await createLeadInFirestore({
+          id: leadId,
           tripId: trip.id,
           tripTitle: trip.title,
           customerName,
@@ -103,15 +106,42 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
           participants,
           totalEstimatedPrice,
           notes,
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errData.error || 'Gagal menyimpan pemesanan.');
+        });
+      } catch (fsErr) {
+        console.warn('Firestore lead create failed:', fsErr);
       }
 
-      const created = (await response.json()) as BookingLead;
+      try {
+        const response = await fetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: leadId,
+            tripId: trip.id,
+            tripTitle: trip.title,
+            customerName,
+            whatsapp,
+            email,
+            departureDate,
+            participants,
+            totalEstimatedPrice,
+            notes,
+          }),
+        });
+        if (response.ok) {
+          const serverLead = (await response.json()) as BookingLead;
+          if (!created) {
+            created = serverLead;
+          }
+        }
+      } catch {
+        // Fallback already handled if Firestore succeeded
+      }
+
+      if (!created) {
+        throw new Error('Gagal menyimpan pemesanan.');
+      }
+
       setSubmittedLead(created);
       onLeadSubmitted(created);
     } catch (err) {

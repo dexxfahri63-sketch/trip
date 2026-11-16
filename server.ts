@@ -311,7 +311,7 @@ async function startServer() {
     }
     const guide = store.guides.find((g) => g.id === payload.guideId);
     const newItem: GalleryItem = {
-      id: `gal-${Date.now()}`,
+      id: payload.id || `gal-${Date.now()}`,
       title: payload.title.trim(),
       caption: (payload.caption || '').trim(),
       destination: payload.destination.trim(),
@@ -390,7 +390,7 @@ async function startServer() {
       return;
     }
     const newGuide: TourGuide = {
-      id: `guide-${Date.now()}`,
+      id: payload.id || `guide-${Date.now()}`,
       name: payload.name.trim(),
       specialty: payload.specialty.trim(),
       certification: (payload.certification || 'Sertifikasi Resmi HPI/APGI').trim(),
@@ -442,7 +442,7 @@ async function startServer() {
       return;
     }
     const newTesti: Testimonial = {
-      id: `testi-${Date.now()}`,
+      id: payload.id || `testi-${Date.now()}`,
       name: payload.name.trim(),
       role: (payload.role || 'Peserta Open Trip').trim(),
       tripName: (payload.tripName || 'Open Trip Nusantara').trim(),
@@ -495,7 +495,7 @@ async function startServer() {
     }
 
     const newLead: BookingLead = {
-      id: `lead-${Date.now()}`,
+      id: payload.id || `lead-${Date.now()}`,
       tripId: payload.tripId || 'custom',
       tripTitle: payload.tripTitle,
       customerName: payload.customerName.trim(),
