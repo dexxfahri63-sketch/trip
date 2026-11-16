@@ -1,0 +1,6 @@
+{
+  "name": "DexxDigital",
+  "description": "Platform Open Trip & Tour Operator Nusantara dengan katalog multi-destinasi, galeri dokumentasi tour guide, dan panel manajemen tersembunyi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
