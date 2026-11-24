@@ -15,6 +15,7 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
   },
   siteContent: {
     brandName: 'DexxDigital',
+    brandLogoUrl: '/logo-dexxdigital.svg',
     headerCtaText: 'Pesan Trip',
     navHomeLabel: 'Beranda',
     navCatalogLabel: 'Katalog Trip',
@@ -22,6 +23,34 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
     navWhyLabel: 'Keunggulan',
     heroKicker: 'Open Trip & Operator Ekspedisi Indonesia · Berlisensi APGI & HPI',
     heroSecondaryCtaText: 'Lihat Aksi Tour Guide',
+    clientsKicker: 'Dipercaya Klien & Mitra Ekspedisi',
+    clientsTitle: 'Komunitas & Perusahaan yang Telah Berangkat Bersama Kami',
+    clientLogos: [
+      {
+        id: 'client-nusantara',
+        name: 'Nusantara Outdoor Club',
+        sector: 'Komunitas Pendaki',
+        logoUrl: '/logos/nusantara-outdoor.svg',
+      },
+      {
+        id: 'client-jelajah',
+        name: 'Jelajah Corp',
+        sector: 'Corporate Retreat',
+        logoUrl: '/logos/jelajah-corp.svg',
+      },
+      {
+        id: 'client-karya',
+        name: 'Karya Mandiri',
+        sector: 'Expedition Partner',
+        logoUrl: '/logos/karya-mandiri.svg',
+      },
+      {
+        id: 'client-archipelago',
+        name: 'Archipelago Visual Studio',
+        sector: 'Media & Dokumentasi',
+        logoUrl: '/logos/archipelago-visual.svg',
+      },
+    ],
     searchDestinationLabel: 'Destinasi Tujuan',
     searchAllDestinationsLabel: 'Semua Destinasi',
     searchDateLabel: 'Bulan / Tanggal Berangkat',
@@ -126,6 +155,20 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
         maxDays: null,
       },
     ],
+    groupDiscounts: [
+      {
+        id: 'grp-5',
+        minParticipants: 5,
+        discountPercent: 10,
+        label: 'Hemat Rombongan Kecil',
+      },
+      {
+        id: 'grp-10',
+        minParticipants: 10,
+        discountPercent: 15,
+        label: 'Hemat Rombongan Besar',
+      },
+    ],
     detailBackText: 'Kembali ke Katalog Trip',
     detailSummaryTitle: 'Ringkasan Perjalanan',
     detailItineraryTitle: 'Itinerary Harian',
@@ -160,6 +203,7 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
       experienceYears: 8,
       tripsLed: 142,
       bio: 'Memimpin lebih dari seratus pendakian Rinjani, Semeru, dan Kerinci dengan fokus pada manajemen aklimatisasi dan keselamatan tim.',
+      photoUrl: '/src/assets/images/guide_portrait_raka_1795012889559.jpg',
     },
     {
       id: 'guide-bagus',
@@ -169,6 +213,7 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
       experienceYears: 7,
       tripsLed: 118,
       bio: 'Spesialis pelayaran liveaboard di Komodo dan Nusa Penida yang menguasai pembacaan arus laut serta dokumentasi bawah air.',
+      photoUrl: '/src/assets/images/guide_portrait_bagus_1795012890204.jpg',
     },
     {
       id: 'guide-sinta',
@@ -178,6 +223,7 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
       experienceYears: 6,
       tripsLed: 95,
       bio: 'Mengawal rute Bromo, Kawah Ijen, hingga dataran tinggi Jawa Barat dengan pendekatan edukatif dan storytelling geologi.',
+      photoUrl: '/src/assets/images/guide_portrait_sinta_1795012890977.jpg',
     },
     {
       id: 'guide-dewi',
@@ -187,6 +233,7 @@ export const INITIAL_STORE_DATA: StoreDatabase = {
       experienceYears: 5,
       tripsLed: 84,
       bio: 'Kurator perjalanan sejarah, kuliner lokal, dan wisata alam perkotaan yang hangat serta terstruktur.',
+      photoUrl: '/src/assets/images/guide_portrait_dewi_1795012890280.jpg',
     },
   ],
   trips: [

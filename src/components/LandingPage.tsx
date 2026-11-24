@@ -253,6 +253,52 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
+      {/* CLIENT & PARTNER LOGO INTRODUCTION STRIP */}
+      {siteContent.clientLogos && siteContent.clientLogos.length > 0 && (
+        <section
+          aria-label="Klien dan Mitra Perjalanan"
+          className="bg-white border-b border-[#E2DFD5]"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <p className="text-xs font-semibold text-[#C85A32] tracking-wide">
+                  {siteContent.clientsKicker || 'Dipercaya Klien & Mitra Ekspedisi'}
+                </p>
+                <h2 className="text-lg sm:text-xl font-bold text-[#17231D] mt-0.5">
+                  {siteContent.clientsTitle ||
+                    'Komunitas & Perusahaan yang Telah Berangkat Bersama Kami'}
+                </h2>
+              </div>
+              <a
+                href={siteContent.brandLogoUrl || '/logo-dexxdigital.svg'}
+                download="logo-dexxdigital.svg"
+                className="inline-flex items-center gap-2 text-xs font-semibold text-[#1B3B2B] hover:text-[#C85A32] transition-colors self-start md:self-auto"
+              >
+                <span>Unduh File Logo Resmi ({siteContent.brandName})</span>
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {siteContent.clientLogos.map((client) => (
+                <div
+                  key={client.id}
+                  className="bg-[#F6F5F0]/70 border border-[#E2DFD5] rounded-xl px-4 py-3.5 flex items-center justify-center"
+                >
+                  <ResilientImage
+                    src={client.logoUrl}
+                    alt={`Logo klien ${client.name}`}
+                    fallbackTitle={client.name}
+                    className="h-11 w-auto max-w-full object-contain"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* 2. DESTINASI POPULER */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">

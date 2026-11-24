@@ -9,6 +9,7 @@ import {
   MapPin,
   MessageCircle,
   Minus,
+  Percent,
   Plus,
   Star,
   Users,
@@ -17,6 +18,7 @@ import {
 import type { BookingLead, SiteContent, TripPackage } from '../types/trip';
 import {
   buildWhatsAppBookingUrl,
+  calculateGroupPricing,
   calculateTotalPrice,
   formatIDR,
   validateBookingInput,
@@ -60,7 +62,20 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
   const [submitError, setSubmitError] = useState('');
   const [submittedLead, setSubmittedLead] = useState<BookingLead | null>(null);
 
-  const totalEstimatedPrice = calculateTotalPrice(trip.pricePerPerson, participants);
+  const groupPricing = calculateGroupPricing(
+    trip.pricePerPerson,
+    participants,
+    siteContent.groupDiscounts
+  );
+  const highestTierMin = Math.max(
+    0,
+    ...groupPricing.tiers.map((tier) => tier.minParticipants)
+  );
+  const maxSelectableParticipants = Math.min(
+    30,
+    Math.max(trip.maxParticipants, highestTierMin)
+  );
+  const totalEstimatedPrice = groupPricing.totalPrice;
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays((prev) =>
@@ -159,6 +174,7 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
     departureDate: submittedLead?.departureDate || departureDate,
     participants: submittedLead?.participants || participants,
     totalEstimatedPrice: submittedLead?.totalEstimatedPrice || totalEstimatedPrice,
+    discountPercent: groupPricing.discountPercent,
     notes: submittedLead?.notes || notes,
   });
 
@@ -411,9 +427,84 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
                 <p className="text-xs text-[#526058]">
                   {siteContent.catalogCardPriceLabel || 'Harga per peserta'}
                 </p>
-                <p className="text-3xl font-bold text-[#C85A32] font-display tabular-nums mt-1">
-                  {formatIDR(trip.pricePerPerson)}
-                </p>
+                {groupPricing.discountPercent > 0 ? (
+                  <div className="mt-1 space-y-1">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <p className="text-3xl font-bold text-[#1B3B2B] font-display tabular-nums">
+                        {formatIDR(groupPricing.discountedUnitPrice)}
+                      </p>
+                      <span className="text-sm text-[#526058] line-through tabular-nums">
+                        {formatIDR(trip.pricePerPerson)}
+                      </span>
+                    </div>
+                    <p
+                      data-testid="active-group-discount-badge"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B3B2B] bg-[#1B3B2B]/10 border border-[#1B3B2B]/20 rounded-md px-2 py-1"
+                    >
+                      <Percent className="w-3.5 h-3.5 text-[#C85A32]" aria-hidden="true" />
+                      <span>
+                        Diskon Rombongan {groupPricing.discountPercent}% aktif (
+                        {groupPricing.appliedTier?.minParticipants}+ orang)
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-3xl font-bold text-[#C85A32] font-display tabular-nums mt-1">
+                    {formatIDR(trip.pricePerPerson)}
+                  </p>
+                )}
+
+                {groupPricing.tiers.length > 0 && (
+                  <div
+                    data-testid="group-discount-tiers-box"
+                    className="mt-4 p-3 rounded-lg bg-[#F6F5F0] border border-[#E2DFD5] space-y-1.5"
+                  >
+                    <p className="text-[11px] font-bold text-[#1B3B2B] uppercase tracking-wide">
+                      Harga Spesial Rombongan
+                    </p>
+                    <ul className="space-y-1">
+                      {groupPricing.tiers.map((tier) => {
+                        const isApplied = groupPricing.appliedTier?.id === tier.id;
+                        const discountedSingle = calculateTotalPrice(
+                          trip.pricePerPerson,
+                          1,
+                          tier.discountPercent
+                        );
+                        return (
+                          <li
+                            key={tier.id}
+                            className={`flex items-center justify-between gap-2 text-xs tabular-nums ${
+                              isApplied
+                                ? 'font-bold text-[#1B3B2B]'
+                                : 'text-[#526058]'
+                            }`}
+                          >
+                            <span className="inline-flex items-center gap-1.5">
+                              {isApplied && (
+                                <CheckCircle2
+                                  className="w-3.5 h-3.5 text-[#1B3B2B] shrink-0"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>
+                                {tier.minParticipants}+ orang · Diskon {tier.discountPercent}%
+                              </span>
+                            </span>
+                            <span className="font-semibold text-[#17231D]">
+                              {formatIDR(discountedSingle)}/org
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {groupPricing.nextTier && (
+                      <p className="text-[11px] text-[#C85A32] font-medium pt-0.5">
+                        Tambah {groupPricing.nextTier.minParticipants - participants} orang lagi
+                        untuk diskon {groupPricing.nextTier.discountPercent}%.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {submittedLead ? (
@@ -503,7 +594,7 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
                       <button
                         type="button"
                         onClick={() =>
-                          setParticipants((p) => Math.min(trip.maxParticipants, p + 1))
+                          setParticipants((p) => Math.min(maxSelectableParticipants, p + 1))
                         }
                         aria-label="Tambah jumlah peserta"
                         className="p-1.5 rounded-md hover:bg-white text-[#1B3B2B] cursor-pointer"
@@ -511,6 +602,12 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
                         <Plus className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>
+                    {participants > trip.maxParticipants && (
+                      <p className="mt-1 text-[11px] text-[#526058]">
+                        Peserta di atas kuota reguler ({trip.maxParticipants} org) akan dijadwalkan
+                        sebagai rombongan khusus oleh tim kami.
+                      </p>
+                    )}
                     {errors.participants && (
                       <p className="mt-1 text-xs text-red-600">{errors.participants}</p>
                     )}
@@ -595,11 +692,32 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
                     />
                   </div>
 
-                  <div className="pt-3 border-t border-[#E2DFD5] flex items-center justify-between">
-                    <span className="text-xs font-medium text-[#526058]">Estimasi Total</span>
-                    <span className="text-lg font-bold text-[#17231D] tabular-nums">
-                      {formatIDR(totalEstimatedPrice)}
-                    </span>
+                  <div className="pt-3 border-t border-[#E2DFD5] space-y-1.5">
+                    {groupPricing.discountPercent > 0 && (
+                      <>
+                        <div className="flex items-center justify-between text-xs text-[#526058]">
+                          <span>Subtotal Normal ({participants} org)</span>
+                          <span className="line-through tabular-nums">
+                            {formatIDR(groupPricing.originalSubtotal)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-semibold text-[#1B3B2B]">
+                          <span>Diskon Rombongan (-{groupPricing.discountPercent}%)</span>
+                          <span className="tabular-nums">
+                            -{formatIDR(groupPricing.discountAmount)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-[#526058]">Estimasi Total</span>
+                      <span
+                        data-testid="booking-total-price"
+                        className="text-lg font-bold text-[#17231D] tabular-nums"
+                      >
+                        {formatIDR(totalEstimatedPrice)}
+                      </span>
+                    </div>
                   </div>
 
                   {submitError && (

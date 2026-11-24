@@ -5,6 +5,7 @@ export type AppView = 'landing' | 'catalog' | 'detail' | 'gallery' | 'admin';
 
 interface NavbarProps {
   brandName: string;
+  brandLogoUrl?: string;
   headerCtaText: string;
   navHomeLabel?: string;
   navCatalogLabel?: string;
@@ -17,6 +18,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   brandName,
+  brandLogoUrl,
   headerCtaText,
   navHomeLabel = 'Beranda',
   navCatalogLabel = 'Katalog Trip',
@@ -36,13 +38,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-[#F6F5F0]/95 backdrop-blur-md border-b border-[#E2DFD5]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
-        {/* Zone 1: Brand Wordmark (Single text element) */}
+        {/* Zone 1: Brand Identity (Logo + Wordmark) */}
         <button
           type="button"
           onClick={() => handleNavClick('landing')}
-          className="text-xl font-bold tracking-tight text-[#1B3B2B] font-display whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C85A32] focus-visible:outline-offset-4"
+          className="inline-flex items-center gap-2.5 text-xl font-bold tracking-tight text-[#1B3B2B] font-display whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C85A32] focus-visible:outline-offset-4"
         >
-          {brandName}
+          <img
+            src={brandLogoUrl || '/logo-dexxdigital.svg'}
+            alt=""
+            aria-hidden="true"
+            className="w-8 h-8 rounded-lg object-contain shrink-0"
+          />
+          <span>{brandName}</span>
         </button>
 
         {/* Zone 2: Clean single-line text nav links */}

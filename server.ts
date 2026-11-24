@@ -62,14 +62,31 @@ function ensureStore(): PersistedStore {
       throw new Error('Invalid store structure');
     }
     let mutated = false;
+    const rawGuides = parsed.guides || structuredClone(INITIAL_STORE_DATA.guides);
+    const enrichedGuides = rawGuides.map((g) => {
+      if (g.photoUrl) return g;
+      const seedMatch = INITIAL_STORE_DATA.guides.find((sg) => sg.id === g.id);
+      if (seedMatch?.photoUrl) {
+        mutated = true;
+        return { ...g, photoUrl: seedMatch.photoUrl };
+      }
+      return g;
+    });
+
     const merged: PersistedStore = {
       trips: parsed.trips,
-      guides: parsed.guides || structuredClone(INITIAL_STORE_DATA.guides),
+      guides: enrichedGuides,
       gallery: parsed.gallery,
       landing: { ...INITIAL_STORE_DATA.landing, ...parsed.landing },
       siteContent: {
         ...INITIAL_STORE_DATA.siteContent,
         ...(parsed.siteContent || {}),
+        brandLogoUrl:
+          parsed.siteContent?.brandLogoUrl || INITIAL_STORE_DATA.siteContent.brandLogoUrl,
+        clientLogos:
+          parsed.siteContent?.clientLogos && parsed.siteContent.clientLogos.length > 0
+            ? parsed.siteContent.clientLogos
+            : INITIAL_STORE_DATA.siteContent.clientLogos,
         tripCategories:
           parsed.siteContent?.tripCategories && parsed.siteContent.tripCategories.length > 0
             ? parsed.siteContent.tripCategories
@@ -82,6 +99,10 @@ function ensureStore(): PersistedStore {
           parsed.siteContent?.durationRanges && parsed.siteContent.durationRanges.length > 0
             ? parsed.siteContent.durationRanges
             : INITIAL_STORE_DATA.siteContent.durationRanges,
+        groupDiscounts:
+          parsed.siteContent?.groupDiscounts !== undefined
+            ? parsed.siteContent.groupDiscounts
+            : INITIAL_STORE_DATA.siteContent.groupDiscounts,
       },
       leads: parsed.leads,
       testimonials:
@@ -93,7 +114,10 @@ function ensureStore(): PersistedStore {
       !parsed.adminPinHash ||
       !parsed.siteContent.tripCategories ||
       !parsed.siteContent.priceRanges ||
-      !parsed.siteContent.durationRanges
+      !parsed.siteContent.durationRanges ||
+      parsed.siteContent.groupDiscounts === undefined ||
+      !parsed.siteContent.brandLogoUrl ||
+      !parsed.siteContent.clientLogos
     ) {
       mutated = true;
     }
@@ -397,6 +421,7 @@ async function startServer() {
       experienceYears: Number(payload.experienceYears) || 3,
       tripsLed: Number(payload.tripsLed) || 10,
       bio: (payload.bio || '').trim(),
+      photoUrl: (payload.photoUrl || '').trim(),
     };
     store.guides.push(newGuide);
     saveStore(store);

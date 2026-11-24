@@ -1,6 +1,7 @@
 import type {
   DurationRangeOption,
   GalleryItem,
+  GroupDiscountTier,
   PriceRangeOption,
   TripCategory,
   TripPackage,
@@ -19,6 +20,13 @@ export const DEFAULT_DURATION_RANGES: DurationRangeOption[] = [
   { id: '3to4', label: '3 – 4 Hari', minDays: 3, maxDays: 4 },
   { id: '5plus', label: '5+ Hari', minDays: 5, maxDays: null },
 ];
+
+export const DEFAULT_GROUP_DISCOUNTS: GroupDiscountTier[] = [
+  { id: 'grp-5', minParticipants: 5, discountPercent: 10, label: 'Hemat Rombongan Kecil' },
+  { id: 'grp-10', minParticipants: 10, discountPercent: 15, label: 'Hemat Rombongan Besar' },
+];
+
+export const RECENT_SEARCHES_STORAGE_KEY = 'dexxdigital_recent_searches';
 
 export function getAvailableTripCategories(
   trips: TripPackage[],
@@ -85,6 +93,177 @@ export function calculateTotalPrice(
   const safeDiscount = Math.min(100, Math.max(0, discountPercent));
   const subtotal = safePrice * safePax;
   return Math.round(subtotal * (1 - safeDiscount / 100));
+}
+
+export function normalizeGroupDiscountTiers(
+  tiers?: GroupDiscountTier[]
+): GroupDiscountTier[] {
+  const source = tiers === undefined ? DEFAULT_GROUP_DISCOUNTS : tiers;
+  if (!Array.isArray(source)) return [];
+
+  const byThreshold = new Map<number, GroupDiscountTier>();
+  for (let i = 0; i < source.length; i += 1) {
+    const raw = source[i];
+    if (!raw) continue;
+    const minPax = Math.floor(Number(raw.minParticipants));
+    const discPct = Math.round(Number(raw.discountPercent));
+    if (!Number.isFinite(minPax) || minPax < 2 || !Number.isFinite(discPct) || discPct <= 0) {
+      continue;
+    }
+    const clampedMin = Math.min(100, minPax);
+    const clampedDisc = Math.min(90, Math.max(1, discPct));
+    const existing = byThreshold.get(clampedMin);
+    if (!existing || clampedDisc > existing.discountPercent) {
+      byThreshold.set(clampedMin, {
+        id: (raw.id || `grp-${clampedMin}-${i}`).trim(),
+        minParticipants: clampedMin,
+        discountPercent: clampedDisc,
+        label: (raw.label || '').trim(),
+      });
+    }
+  }
+
+  return Array.from(byThreshold.values()).sort(
+    (a, b) => a.minParticipants - b.minParticipants
+  );
+}
+
+export function resolveGroupDiscount(
+  participants: number,
+  tiers?: GroupDiscountTier[]
+): {
+  appliedTier: GroupDiscountTier | null;
+  discountPercent: number;
+  nextTier: GroupDiscountTier | null;
+  tiers: GroupDiscountTier[];
+} {
+  const normalized = normalizeGroupDiscountTiers(tiers);
+  const safePax = Math.max(1, Math.floor(Number(participants) || 1));
+
+  let appliedTier: GroupDiscountTier | null = null;
+  let nextTier: GroupDiscountTier | null = null;
+
+  for (const tier of normalized) {
+    if (safePax >= tier.minParticipants) {
+      appliedTier = tier;
+    } else if (!nextTier) {
+      nextTier = tier;
+    }
+  }
+
+  return {
+    appliedTier,
+    discountPercent: appliedTier ? appliedTier.discountPercent : 0,
+    nextTier,
+    tiers: normalized,
+  };
+}
+
+export function calculateGroupPricing(
+  pricePerPerson: number,
+  participants: number,
+  tiers?: GroupDiscountTier[]
+): {
+  unitPrice: number;
+  originalSubtotal: number;
+  discountPercent: number;
+  discountAmount: number;
+  totalPrice: number;
+  discountedUnitPrice: number;
+  appliedTier: GroupDiscountTier | null;
+  nextTier: GroupDiscountTier | null;
+  tiers: GroupDiscountTier[];
+} {
+  const safePrice = Math.max(0, Number(pricePerPerson) || 0);
+  const safePax = Math.max(1, Math.floor(Number(participants) || 1));
+  const originalSubtotal = Math.round(safePrice * safePax);
+  const { appliedTier, discountPercent, nextTier, tiers: normalizedTiers } =
+    resolveGroupDiscount(safePax, tiers);
+  const totalPrice = calculateTotalPrice(safePrice, safePax, discountPercent);
+  const discountAmount = Math.max(0, originalSubtotal - totalPrice);
+  const discountedUnitPrice = Math.round(totalPrice / safePax);
+
+  return {
+    unitPrice: safePrice,
+    originalSubtotal,
+    discountPercent,
+    discountAmount,
+    totalPrice,
+    discountedUnitPrice,
+    appliedTier,
+    nextTier,
+    tiers: normalizedTiers,
+  };
+}
+
+export function addRecentSearchQuery(
+  existing: string[],
+  query: string,
+  limit = 3
+): string[] {
+  const clean = (query || '').trim();
+  if (!clean) return existing.slice(0, limit);
+  const deduped = existing.filter(
+    (item) => item.trim().toLowerCase() !== clean.toLowerCase()
+  );
+  return [clean, ...deduped].slice(0, Math.max(1, limit));
+}
+
+export function loadRecentSearches(
+  storageKey = RECENT_SEARCHES_STORAGE_KEY,
+  limit = 3
+): string[] {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const result: string[] = [];
+    const seen = new Set<string>();
+    for (const item of parsed) {
+      if (typeof item !== 'string') continue;
+      const clean = item.trim();
+      if (!clean) continue;
+      const lower = clean.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push(clean);
+      }
+      if (result.length >= limit) break;
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+export function saveRecentSearches(
+  queries: string[],
+  storageKey = RECENT_SEARCHES_STORAGE_KEY,
+  limit = 3
+): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const clean = queries
+      .map((q) => q.trim())
+      .filter(Boolean)
+      .slice(0, limit);
+    window.localStorage.setItem(storageKey, JSON.stringify(clean));
+  } catch {
+    // Ignore storage quota or SSR access errors
+  }
+}
+
+export function clearRecentSearches(
+  storageKey = RECENT_SEARCHES_STORAGE_KEY
+): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    // Ignore storage access errors
+  }
 }
 
 export function filterTrips(
@@ -246,6 +425,7 @@ export function buildWhatsAppBookingUrl(
     departureDate: string;
     participants: number;
     totalEstimatedPrice: number;
+    discountPercent?: number;
     notes?: string;
   }
 ): string {
@@ -260,8 +440,13 @@ export function buildWhatsAppBookingUrl(
     `- Nama: ${params.customerName}`,
     `- Tanggal Keberangkatan: ${params.departureDate}`,
     `- Jumlah Peserta: ${params.participants} orang`,
-    `- Estimasi Total: ${formatIDR(params.totalEstimatedPrice)}`,
   ];
+
+  if (params.discountPercent && params.discountPercent > 0) {
+    lines.push(`- Diskon Rombongan: Hemat ${params.discountPercent}%`);
+  }
+
+  lines.push(`- Estimasi Total: ${formatIDR(params.totalEstimatedPrice)}`);
 
   if (params.notes && params.notes.trim()) {
     lines.push(`- Catatan: ${params.notes.trim()}`);
@@ -305,3 +490,28 @@ export function validatePinChangeInput(input: {
     errors,
   };
 }
+
+export function splitCopyrightTrigger(copyrightText: string): {
+  triggerText: string;
+  restText: string;
+} {
+  const clean = (copyrightText || '').trim();
+  if (!clean) {
+    return {
+      triggerText: '© 2026',
+      restText: ' DexxDigital Open Trip & Tour Operator.',
+    };
+  }
+  const match = clean.match(/^(©\s*\d{4})(.*)$/);
+  if (match) {
+    return {
+      triggerText: match[1],
+      restText: match[2],
+    };
+  }
+  return {
+    triggerText: '© 2026',
+    restText: ` ${clean}`,
+  };
+}
+

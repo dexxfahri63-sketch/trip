@@ -24,9 +24,11 @@ import {
 } from 'lucide-react';
 import type {
   BookingLead,
+  ClientLogoItem,
   DifficultyLevel,
   DurationRangeOption,
   GalleryItem,
+  GroupDiscountTier,
   ItineraryDay,
   LandingSettings,
   LeadStatus,
@@ -42,6 +44,7 @@ import type {
 } from '../types/trip';
 import {
   DEFAULT_DURATION_RANGES,
+  DEFAULT_GROUP_DISCOUNTS,
   DEFAULT_PRICE_RANGES,
   buildWhatsAppBookingUrl,
   formatIDR,
@@ -71,6 +74,11 @@ import { ResilientImage } from './ResilientImage';
 function normalizeSiteContentDraft(sc: SiteContent): SiteContent {
   return {
     ...sc,
+    brandLogoUrl: sc.brandLogoUrl || '/logo-dexxdigital.svg',
+    clientsKicker: sc.clientsKicker || 'Dipercaya Klien & Mitra Ekspedisi',
+    clientsTitle:
+      sc.clientsTitle || 'Komunitas & Perusahaan yang Telah Berangkat Bersama Kami',
+    clientLogos: Array.isArray(sc.clientLogos) ? structuredClone(sc.clientLogos) : [],
     priceRanges:
       sc.priceRanges && sc.priceRanges.length > 0
         ? structuredClone(sc.priceRanges)
@@ -79,6 +87,10 @@ function normalizeSiteContentDraft(sc: SiteContent): SiteContent {
       sc.durationRanges && sc.durationRanges.length > 0
         ? structuredClone(sc.durationRanges)
         : structuredClone(DEFAULT_DURATION_RANGES),
+    groupDiscounts:
+      sc.groupDiscounts !== undefined
+        ? structuredClone(sc.groupDiscounts)
+        : structuredClone(DEFAULT_GROUP_DISCOUNTS),
   };
 }
 
@@ -887,8 +899,56 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       experienceYears: 4,
       tripsLed: 25,
       bio: '',
+      photoUrl: '',
     });
     setGuideFormOpen(true);
+  };
+
+  const handleGuidePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingGuide) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file);
+      setEditingGuide({ ...editingGuide, photoUrl: dataUrl });
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Gagal membaca foto tour guide.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleBrandLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file);
+      setSiteDraft((prev) => ({ ...prev, brandLogoUrl: dataUrl }));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Gagal membaca file logo brand.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleClientLogoUpload = async (
+    clientId: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file);
+      setSiteDraft((prev) => ({
+        ...prev,
+        clientLogos: (prev.clientLogos || []).map((c) =>
+          c.id === clientId ? { ...c, logoUrl: dataUrl } : c
+        ),
+      }));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Gagal membaca file logo klien.');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleSaveGuide = async (e: React.FormEvent) => {
@@ -1114,12 +1174,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       return;
     }
 
+    const cleanedGroupDiscounts = (siteDraft.groupDiscounts || [])
+      .map((tier, idx) => ({
+        id: (tier.id || `grp-${idx + 1}-${Date.now()}`).trim(),
+        minParticipants: Math.min(100, Math.max(2, Math.floor(Number(tier.minParticipants) || 2))),
+        discountPercent: Math.min(90, Math.max(1, Math.round(Number(tier.discountPercent) || 5))),
+        label: (tier.label || '').trim(),
+      }))
+      .sort((a, b) => a.minParticipants - b.minParticipants);
+
     setSavingSite(true);
     try {
       const payload: SiteContent = {
         ...siteDraft,
         priceRanges: cleanedPriceRanges,
         durationRanges: cleanedDurationRanges,
+        groupDiscounts: cleanedGroupDiscounts,
       };
       let saved: SiteContent = payload;
       if (isFirebaseAdmin) {
@@ -2207,6 +2277,62 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         />
                         </div>
                       </div>
+                      <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center p-4 rounded-xl bg-white border border-[#E2DFD5]">
+                        <div className="sm:col-span-4 aspect-[4/3] rounded-lg overflow-hidden bg-[#EDEBE4] border border-[#E2DFD5]">
+                          <ResilientImage
+                            src={editingGuide.photoUrl || ''}
+                            alt={editingGuide.name || 'Preview Foto Guide'}
+                            fallbackTitle="Foto Guide"
+                            className="w-full h-full object-cover object-top"
+                          />
+                        </div>
+                        <div className="sm:col-span-8 space-y-2.5">
+                          <div>
+                            <label
+                              htmlFor="guide-photo-upload"
+                              className="block text-xs font-semibold text-[#526058] mb-1"
+                            >
+                              Upload Foto Tour Guide
+                            </label>
+                            <input
+                              id="guide-photo-upload"
+                              type="file"
+                              accept="image/*"
+                              onChange={handleGuidePhotoUpload}
+                              className="w-full text-xs text-[#526058] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#E2DFD5] file:text-xs file:font-semibold file:bg-[#F6F5F0] file:text-[#17231D] hover:file:bg-[#EDEBE4]"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="guide-photo-url"
+                              className="block text-xs font-semibold text-[#526058] mb-1"
+                            >
+                              Atau Ketik / Tempel URL Foto Tour Guide
+                            </label>
+                            <input
+                              id="guide-photo-url"
+                              type="text"
+                              value={
+                                (editingGuide.photoUrl || '').startsWith('data:')
+                                  ? ''
+                                  : editingGuide.photoUrl || ''
+                              }
+                              onChange={(e) =>
+                                setEditingGuide({
+                                  ...editingGuide,
+                                  photoUrl: e.target.value,
+                                })
+                              }
+                              placeholder={
+                                (editingGuide.photoUrl || '').startsWith('data:')
+                                  ? 'Foto lokal telah diupload (tempel URL baru untuk mengganti)'
+                                  : 'https://contoh.com/foto-guide.jpg'
+                              }
+                              className="w-full px-3 py-1.5 text-xs bg-[#F6F5F0] border border-[#E2DFD5] rounded-lg"
+                            />
+                          </div>
+                        </div>
+                      </div>
                       <div className="sm:col-span-2">
                         <label
                           htmlFor="guide-bio"
@@ -2252,12 +2378,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       key={guide.id}
                       className="p-4 rounded-lg border border-[#E2DFD5] bg-[#F6F5F0]/50 flex items-start justify-between gap-4"
                     >
-                      <div>
-                        <p className="text-sm font-bold text-[#17231D]">{guide.name}</p>
-                        <p className="text-xs text-[#526058] mt-0.5">{guide.specialty}</p>
-                        <p className="text-xs text-[#1B3B2B] mt-1">
-                          {guide.certification} · {guide.experienceYears} thn · {guide.tripsLed} trip
-                        </p>
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-14 h-14 rounded-lg overflow-hidden bg-[#EDEBE4] border border-[#E2DFD5] shrink-0">
+                          <ResilientImage
+                            src={guide.photoUrl || ''}
+                            alt={guide.name}
+                            fallbackTitle={guide.name}
+                            className="w-full h-full object-cover object-top"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-[#17231D]">{guide.name}</p>
+                          <p className="text-xs text-[#526058] mt-0.5">{guide.specialty}</p>
+                          <p className="text-xs text-[#1B3B2B] mt-1">
+                            {guide.certification} · {guide.experienceYears} thn · {guide.tripsLed} trip
+                          </p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
@@ -2531,6 +2667,205 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       }
                       className="w-full px-3 py-2 text-sm bg-[#F6F5F0] border border-[#E2DFD5] rounded-lg"
                     />
+                  </div>
+                  {/* Brand Logo & Browser Tab Favicon */}
+                  <div className="sm:col-span-2 p-4 rounded-xl bg-[#F6F5F0] border border-[#E2DFD5] space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-[#17231D]">
+                          File Logo Brand & Favicon Tab Browser
+                        </p>
+                        <p className="text-[11px] text-[#526058]">
+                          Tampil di Header, Footer, Ikon Tab Browser, dan tersedia sebagai file unduhan untuk perkenalan klien.
+                        </p>
+                      </div>
+                      <a
+                        href={siteDraft.brandLogoUrl || '/logo-dexxdigital.svg'}
+                        download="logo-dexxdigital.svg"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1B3B2B] bg-white border border-[#E2DFD5] hover:border-[#1B3B2B] rounded-lg"
+                      >
+                        <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Unduh File Logo</span>
+                      </a>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                      <div className="sm:col-span-3 h-20 rounded-lg bg-white border border-[#E2DFD5] flex items-center justify-center p-2">
+                        <img
+                          src={siteDraft.brandLogoUrl || '/logo-dexxdigital.svg'}
+                          alt="Preview Logo Brand"
+                          className="h-14 w-14 object-contain"
+                        />
+                      </div>
+                      <div className="sm:col-span-9 space-y-2">
+                        <input
+                          id="sc-brand-logo-upload"
+                          type="file"
+                          accept="image/*,.svg"
+                          onChange={handleBrandLogoUpload}
+                          className="w-full text-xs text-[#526058] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#E2DFD5] file:text-xs file:font-semibold file:bg-white file:text-[#17231D] hover:file:bg-[#EDEBE4]"
+                        />
+                        <input
+                          id="sc-brand-logo-url"
+                          type="text"
+                          value={
+                            (siteDraft.brandLogoUrl || '').startsWith('data:')
+                              ? ''
+                              : siteDraft.brandLogoUrl || ''
+                          }
+                          onChange={(e) =>
+                            setSiteDraft({ ...siteDraft, brandLogoUrl: e.target.value })
+                          }
+                          placeholder={
+                            (siteDraft.brandLogoUrl || '').startsWith('data:')
+                              ? 'File logo baru telah diupload'
+                              : '/logo-dexxdigital.svg'
+                          }
+                          className="w-full px-3 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {/* Client & Partner Logos CRUD */}
+                  <div className="sm:col-span-2 p-4 rounded-xl bg-[#F6F5F0] border border-[#E2DFD5] space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-[#17231D]">
+                          Logo Klien & Mitra (Perkenalan Client di Beranda)
+                        </p>
+                        <p className="text-[11px] text-[#526058]">
+                          Upload file SVG/PNG logo klien atau mitra perusahaan yang ditampilkan di halaman beranda.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newClient: ClientLogoItem = {
+                            id: `client-${Date.now()}`,
+                            name: 'Mitra Ekspedisi Baru',
+                            sector: 'Partner',
+                            logoUrl: '/logos/nusantara-outdoor.svg',
+                          };
+                          setSiteDraft({
+                            ...siteDraft,
+                            clientLogos: [...(siteDraft.clientLogos || []), newClient],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B3B2B] hover:text-[#C85A32] cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Tambah Logo Klien</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label
+                          htmlFor="sc-clients-kicker"
+                          className="block text-[11px] font-semibold text-[#526058] mb-1"
+                        >
+                          Kicker Bagian Klien
+                        </label>
+                        <input
+                          id="sc-clients-kicker"
+                          type="text"
+                          value={siteDraft.clientsKicker || ''}
+                          onChange={(e) =>
+                            setSiteDraft({ ...siteDraft, clientsKicker: e.target.value })
+                          }
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="sc-clients-title"
+                          className="block text-[11px] font-semibold text-[#526058] mb-1"
+                        >
+                          Judul Bagian Klien
+                        </label>
+                        <input
+                          id="sc-clients-title"
+                          type="text"
+                          value={siteDraft.clientsTitle || ''}
+                          onChange={(e) =>
+                            setSiteDraft({ ...siteDraft, clientsTitle: e.target.value })
+                          }
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {(siteDraft.clientLogos || []).map((client, cIdx) => (
+                        <div
+                          key={client.id}
+                          className="p-3 rounded-lg bg-white border border-[#E2DFD5] space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <input
+                              type="text"
+                              aria-label={`Nama klien ${cIdx + 1}`}
+                              value={client.name}
+                              onChange={(e) => {
+                                const updated = [...(siteDraft.clientLogos || [])];
+                                updated[cIdx] = { ...client, name: e.target.value };
+                                setSiteDraft({ ...siteDraft, clientLogos: updated });
+                              }}
+                              className="flex-1 px-2 py-1 text-xs font-semibold bg-[#F6F5F0] border border-[#E2DFD5] rounded"
+                            />
+                            <button
+                              type="button"
+                              aria-label={`Hapus logo ${client.name}`}
+                              onClick={() =>
+                                setSiteDraft({
+                                  ...siteDraft,
+                                  clientLogos: (siteDraft.clientLogos || []).filter(
+                                    (c) => c.id !== client.id
+                                  ),
+                                })
+                              }
+                              className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="w-24 h-12 rounded border border-[#E2DFD5] bg-[#F6F5F0]/60 flex items-center justify-center p-1 shrink-0">
+                              <ResilientImage
+                                src={client.logoUrl}
+                                alt={client.name}
+                                fallbackTitle={client.name}
+                                className="h-9 w-auto max-w-full object-contain"
+                              />
+                            </div>
+                            <div className="flex-1 space-y-1.5 min-w-0">
+                              <input
+                                type="file"
+                                accept="image/*,.svg"
+                                aria-label={`Upload file logo ${client.name}`}
+                                onChange={(e) => handleClientLogoUpload(client.id, e)}
+                                className="w-full text-[11px] text-[#526058] file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-[#E2DFD5] file:text-[11px] file:font-semibold file:bg-[#F6F5F0]"
+                              />
+                              <input
+                                type="text"
+                                aria-label={`Path atau URL logo ${client.name}`}
+                                value={
+                                  client.logoUrl.startsWith('data:') ? '' : client.logoUrl
+                                }
+                                onChange={(e) => {
+                                  const updated = [...(siteDraft.clientLogos || [])];
+                                  updated[cIdx] = { ...client, logoUrl: e.target.value };
+                                  setSiteDraft({ ...siteDraft, clientLogos: updated });
+                                }}
+                                placeholder={
+                                  client.logoUrl.startsWith('data:')
+                                    ? 'File logo terupload'
+                                    : '/logos/nama-file.svg'
+                                }
+                                className="w-full px-2 py-1 text-[11px] bg-[#F6F5F0] border border-[#E2DFD5] rounded"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div>
                     <label
@@ -3567,6 +3902,148 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     ))}
                   </div>
                 </div>
+
+                {/* Diskon Rombongan Otomatis (Jumlah Peserta) */}
+                <div className="pt-4 border-t border-[#E2DFD5] space-y-3" data-testid="admin-group-discount-section">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-[#17231D]">
+                        Diskon Rombongan Otomatis (Berdasarkan Jumlah Orang)
+                      </h3>
+                      <p className="text-xs text-[#526058]">
+                        Atur jumlah peserta minimal untuk mendapatkan harga lebih murah secara otomatis di halaman detail paket (contoh: 5+ orang diskon 10%, 10+ orang diskon 15%).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const existing = siteDraft.groupDiscounts || [];
+                        const highestMin = existing.reduce(
+                          (max, item) => Math.max(max, item.minParticipants),
+                          0
+                        );
+                        const nextMin = highestMin > 0 ? Math.min(100, highestMin + 5) : 5;
+                        const nextTier: GroupDiscountTier = {
+                          id: `grp-${Date.now()}`,
+                          minParticipants: nextMin,
+                          discountPercent: 10,
+                          label: `Hemat Rombongan ${nextMin}+ Org`,
+                        };
+                        setSiteDraft({
+                          ...siteDraft,
+                          groupDiscounts: [...existing, nextTier],
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-[#1B3B2B] hover:bg-[#132A1E] rounded-lg cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Tambah Aturan Diskon</span>
+                    </button>
+                  </div>
+
+                  {(siteDraft.groupDiscounts || []).length === 0 ? (
+                    <p className="text-xs text-[#526058] italic bg-[#F6F5F0] border border-[#E2DFD5] rounded-lg p-3">
+                      Belum ada aturan diskon rombongan aktif. Klik &quot;Tambah Aturan Diskon&quot; untuk mengaktifkan potongan harga grup.
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {(siteDraft.groupDiscounts || []).map((tier, idx) => (
+                        <div
+                          key={tier.id}
+                          className="p-3 rounded-lg bg-[#F6F5F0] border border-[#E2DFD5] grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+                        >
+                          <div className="sm:col-span-3">
+                            <label
+                              htmlFor={`grp-min-${idx}`}
+                              className="block text-[11px] font-semibold text-[#526058] mb-1"
+                            >
+                              Minimal Peserta (Orang)
+                            </label>
+                            <input
+                              id={`grp-min-${idx}`}
+                              type="number"
+                              min={2}
+                              max={100}
+                              value={tier.minParticipants}
+                              onChange={(e) => {
+                                const val = Math.min(
+                                  100,
+                                  Math.max(2, Math.floor(Number(e.target.value) || 2))
+                                );
+                                const updated = [...(siteDraft.groupDiscounts || [])];
+                                updated[idx] = { ...tier, minParticipants: val };
+                                setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded-lg tabular-nums"
+                            />
+                          </div>
+                          <div className="sm:col-span-3">
+                            <label
+                              htmlFor={`grp-pct-${idx}`}
+                              className="block text-[11px] font-semibold text-[#526058] mb-1"
+                            >
+                              Diskon (%)
+                            </label>
+                            <input
+                              id={`grp-pct-${idx}`}
+                              type="number"
+                              min={1}
+                              max={90}
+                              value={tier.discountPercent}
+                              onChange={(e) => {
+                                const val = Math.min(
+                                  90,
+                                  Math.max(1, Math.round(Number(e.target.value) || 1))
+                                );
+                                const updated = [...(siteDraft.groupDiscounts || [])];
+                                updated[idx] = { ...tier, discountPercent: val };
+                                setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded-lg tabular-nums"
+                            />
+                          </div>
+                          <div className="sm:col-span-5">
+                            <label
+                              htmlFor={`grp-label-${idx}`}
+                              className="block text-[11px] font-semibold text-[#526058] mb-1"
+                            >
+                              Label Keterangan (Opsional)
+                            </label>
+                            <input
+                              id={`grp-label-${idx}`}
+                              type="text"
+                              placeholder="Contoh: Hemat Rombongan Kecil"
+                              value={tier.label || ''}
+                              onChange={(e) => {
+                                const updated = [...(siteDraft.groupDiscounts || [])];
+                                updated[idx] = { ...tier, label: e.target.value };
+                                setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded-lg"
+                            />
+                          </div>
+                          <div className="sm:col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              aria-label={`Hapus diskon ${tier.minParticipants} orang`}
+                              onClick={() =>
+                                setSiteDraft({
+                                  ...siteDraft,
+                                  groupDiscounts: (siteDraft.groupDiscounts || []).filter(
+                                    (_, i) => i !== idx
+                                  ),
+                                })
+                              }
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </section>
 
               {/* 4. Testimoni, CTA Penutup, Halaman Detail Trip & Galeri */}
@@ -4341,6 +4818,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   Gunakan kombinasi angka PIN atau kata sandi minimal 4 karakter untuk melindungi
                   panel manajemen ini.
                 </p>
+                <div className="mt-3 p-3.5 rounded-lg bg-[#F6F5F0] border border-[#E2DFD5] text-xs text-[#17231D] space-y-1">
+                  <p className="font-semibold text-[#1B3B2B]">Cara Membuka Panel Rahasia:</p>
+                  <p>
+                    • <strong>HP / Layar Sentuh:</strong> Ketuk teks{' '}
+                    <span className="font-mono font-semibold">© 2026</span> di baris paling bawah footer.
+                  </p>
+                  <p>
+                    • <strong>Komputer / Keyboard:</strong> Tekan kombinasi{' '}
+                    <span className="font-mono font-semibold">Ctrl + Shift + 8 + 9</span>.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-4">

@@ -36,6 +36,11 @@ function mergeSiteContent(
   return {
     ...base,
     ...(incoming || {}),
+    brandLogoUrl: incoming?.brandLogoUrl || base.brandLogoUrl,
+    clientLogos:
+      incoming?.clientLogos && incoming.clientLogos.length > 0
+        ? incoming.clientLogos
+        : base.clientLogos,
     priceRanges:
       incoming?.priceRanges && incoming.priceRanges.length > 0
         ? incoming.priceRanges
@@ -44,11 +49,25 @@ function mergeSiteContent(
       incoming?.durationRanges && incoming.durationRanges.length > 0
         ? incoming.durationRanges
         : base.durationRanges,
+    groupDiscounts:
+      incoming?.groupDiscounts !== undefined
+        ? incoming.groupDiscounts
+        : base.groupDiscounts,
     tripCategories:
       incoming?.tripCategories && incoming.tripCategories.length > 0
         ? incoming.tripCategories
         : base.tripCategories,
   };
+}
+
+function mergeGuidesWithDefaults(
+  guides: StoreDatabase['guides']
+): StoreDatabase['guides'] {
+  return guides.map((g) => {
+    if (g.photoUrl) return g;
+    const seedMatch = INITIAL_STORE_DATA.guides.find((sg) => sg.id === g.id);
+    return seedMatch?.photoUrl ? { ...g, photoUrl: seedMatch.photoUrl } : g;
+  });
 }
 
 export default function App() {
@@ -125,6 +144,7 @@ export default function App() {
           setStore((prev) => ({
             ...prev,
             ...data,
+            guides: mergeGuidesWithDefaults(data.guides || prev.guides),
             siteContent: mergeSiteContent(INITIAL_STORE_DATA.siteContent, data.siteContent),
           }));
         }
@@ -141,7 +161,7 @@ export default function App() {
       setStore((prev) => ({
         ...prev,
         ...(patch.trips ? { trips: patch.trips } : {}),
-        ...(patch.guides ? { guides: patch.guides } : {}),
+        ...(patch.guides ? { guides: mergeGuidesWithDefaults(patch.guides) } : {}),
         ...(patch.gallery ? { gallery: patch.gallery } : {}),
         ...(patch.testimonials ? { testimonials: patch.testimonials } : {}),
         ...(patch.landing ? { landing: { ...prev.landing, ...patch.landing } } : {}),
@@ -192,6 +212,74 @@ export default function App() {
       document.title = `${store.siteContent.brandName} — Open Trip & Tour Operator Nusantara`;
     }
   }, [store.siteContent.brandName]);
+
+  // Sync browser tab favicon dynamically if brandLogoUrl is customized
+  useEffect(() => {
+    const iconHref = store.siteContent.brandLogoUrl || '/favicon.svg';
+    const links = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']");
+    if (links.length > 0) {
+      links.forEach((link) => {
+        link.href = iconHref;
+      });
+    } else {
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      link.href = iconHref;
+      document.head.appendChild(link);
+    }
+  }, [store.siteContent.brandLogoUrl]);
+
+  // Hidden desktop shortcut: Ctrl + Shift + 89 (supports simultaneous 8+9 or sequential 8 then 9)
+  const pressedKeysRef = useRef<Set<string>>(new Set());
+  const lastDigit8AtRef = useRef<number>(0);
+
+  useEffect(() => {
+    const isEightKey = (e: KeyboardEvent) =>
+      e.code === 'Digit8' || e.key === '8' || e.key === '*';
+    const isNineKey = (e: KeyboardEvent) =>
+      e.code === 'Digit9' || e.key === '9' || e.key === '(';
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const eight = isEightKey(e);
+      const nine = isNineKey(e);
+
+      if (eight) pressedKeysRef.current.add('8');
+      if (nine) pressedKeysRef.current.add('9');
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+        const now = Date.now();
+        if (eight) {
+          lastDigit8AtRef.current = now;
+        }
+        const simultaneous =
+          pressedKeysRef.current.has('8') && pressedKeysRef.current.has('9');
+        const sequential = nine && now - lastDigit8AtRef.current <= 1500;
+
+        if (simultaneous || sequential) {
+          e.preventDefault();
+          lastDigit8AtRef.current = 0;
+          pressedKeysRef.current.clear();
+          setCurrentView('admin');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (isEightKey(e)) pressedKeysRef.current.delete('8');
+      if (isNineKey(e)) pressedKeysRef.current.delete('9');
+      if (!e.ctrlKey && !e.shiftKey) {
+        pressedKeysRef.current.clear();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
 
   const navigateTo = (view: AppView) => {
     setCurrentView(view);
@@ -333,6 +421,7 @@ export default function App() {
       <div className="min-h-screen flex flex-col bg-[#F6F5F0] text-[#17231D]">
         <Navbar
           brandName={store.siteContent.brandName}
+          brandLogoUrl={store.siteContent.brandLogoUrl}
           headerCtaText={store.siteContent.headerCtaText}
           navHomeLabel={store.siteContent.navHomeLabel}
           navCatalogLabel={store.siteContent.navCatalogLabel}

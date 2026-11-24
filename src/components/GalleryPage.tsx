@@ -64,7 +64,7 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({
           <h2 className="text-lg font-bold text-[#17231D] mb-4">
             {siteContent.galleryGuidesTitle || 'Tim Tour Guide Bersertifikat'}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {guides.map((guide) => {
               const isSelected = guideFilter === guide.id;
               return (
@@ -74,38 +74,57 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({
                   onClick={() =>
                     setGuideFilter((prev) => (prev === guide.id ? 'Semua' : guide.id))
                   }
-                  className={`text-left p-5 rounded-xl border transition-colors cursor-pointer ${
+                  className={`text-left rounded-xl border overflow-hidden flex flex-col transition-all cursor-pointer group ${
                     isSelected
-                      ? 'bg-[#1B3B2B] text-white border-[#1B3B2B]'
+                      ? 'bg-[#1B3B2B] text-white border-[#1B3B2B] shadow-md'
                       : 'bg-white text-[#17231D] border-[#E2DFD5] hover:border-[#1B3B2B]'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-base font-bold font-display">{guide.name}</h3>
-                    <Award
-                      className={`w-4 h-4 shrink-0 ${
-                        isSelected ? 'text-[#DB724B]' : 'text-[#C85A32]'
-                      }`}
-                      aria-hidden="true"
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-[#EDEBE4] relative">
+                    <ResilientImage
+                      src={guide.photoUrl || ''}
+                      alt={`Foto profil Tour Guide ${guide.name}`}
+                      fallbackTitle={guide.name}
+                      className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
                     />
                   </div>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isSelected ? 'text-[#F6F5F0]/80' : 'text-[#526058]'
-                    }`}
-                  >
-                    {guide.specialty}
-                  </p>
-                  <div
-                    className={`mt-3 pt-3 border-t text-xs flex items-center gap-2 tabular-nums ${
-                      isSelected
-                        ? 'border-white/15 text-[#F6F5F0]/85'
-                        : 'border-[#E2DFD5] text-[#526058]'
-                    }`}
-                  >
-                    <span>{guide.experienceYears} thn pengalaman</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{guide.tripsLed} trip</span>
+                  <div className="p-4 flex flex-col flex-1 justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-base font-bold font-display">{guide.name}</h3>
+                        <Award
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${
+                            isSelected ? 'text-[#DB724B]' : 'text-[#C85A32]'
+                          }`}
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <p
+                        className={`text-xs font-medium mt-0.5 ${
+                          isSelected ? 'text-[#F6D3B8]' : 'text-[#C85A32]'
+                        }`}
+                      >
+                        {guide.specialty}
+                      </p>
+                      <p
+                        className={`text-[11px] mt-1.5 leading-relaxed line-clamp-2 ${
+                          isSelected ? 'text-[#F6F5F0]/80' : 'text-[#526058]'
+                        }`}
+                      >
+                        {guide.certification}
+                      </p>
+                    </div>
+                    <div
+                      className={`mt-3 pt-3 border-t text-xs flex items-center gap-2 tabular-nums ${
+                        isSelected
+                          ? 'border-white/15 text-[#F6F5F0]/90'
+                          : 'border-[#E2DFD5] text-[#526058]'
+                      }`}
+                    >
+                      <span>{guide.experienceYears} thn pengalaman</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{guide.tripsLed} trip</span>
+                    </div>
                   </div>
                 </button>
               );

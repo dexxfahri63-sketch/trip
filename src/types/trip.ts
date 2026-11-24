@@ -52,6 +52,14 @@ export interface TourGuide {
   experienceYears: number;
   tripsLed: number;
   bio: string;
+  photoUrl?: string;
+}
+
+export interface ClientLogoItem {
+  id: string;
+  name: string;
+  sector?: string;
+  logoUrl: string;
 }
 
 export interface GalleryItem {
@@ -105,8 +113,16 @@ export interface DurationRangeOption {
   maxDays?: number | null;
 }
 
+export interface GroupDiscountTier {
+  id: string;
+  minParticipants: number;
+  discountPercent: number;
+  label?: string;
+}
+
 export interface SiteContent {
   brandName: string;
+  brandLogoUrl?: string;
   headerCtaText: string;
   navHomeLabel?: string;
   navCatalogLabel?: string;
@@ -114,6 +130,9 @@ export interface SiteContent {
   navWhyLabel?: string;
   heroKicker: string;
   heroSecondaryCtaText: string;
+  clientsKicker?: string;
+  clientsTitle?: string;
+  clientLogos?: ClientLogoItem[];
   searchDestinationLabel?: string;
   searchAllDestinationsLabel?: string;
   searchDateLabel?: string;
@@ -150,6 +169,7 @@ export interface SiteContent {
   catalogEmptySubtitle?: string;
   priceRanges?: PriceRangeOption[];
   durationRanges?: DurationRangeOption[];
+  groupDiscounts?: GroupDiscountTier[];
   detailBackText?: string;
   detailSummaryTitle?: string;
   detailItineraryTitle?: string;

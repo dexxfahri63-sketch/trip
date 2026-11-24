@@ -41,7 +41,8 @@
         "certification": { "type": "string", "maxLength": 240 },
         "experienceYears": { "type": "number" },
         "tripsLed": { "type": "number" },
-        "bio": { "type": "string", "maxLength": 1500 }
+        "bio": { "type": "string", "maxLength": 1500 },
+        "photoUrl": { "type": "string", "maxLength": 450000 }
       },
       "required": ["id", "name", "specialty"]
     },
@@ -101,14 +102,19 @@
       "type": "object",
       "properties": {
         "brandName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "brandLogoUrl": { "type": "string", "maxLength": 450000 },
         "headerCtaText": { "type": "string", "maxLength": 80 },
         "navHomeLabel": { "type": "string", "maxLength": 60 },
         "navCatalogLabel": { "type": "string", "maxLength": 60 },
         "navGalleryLabel": { "type": "string", "maxLength": 60 },
         "navWhyLabel": { "type": "string", "maxLength": 60 },
+        "clientsKicker": { "type": "string", "maxLength": 120 },
+        "clientsTitle": { "type": "string", "maxLength": 200 },
+        "clientLogos": { "type": "array" },
         "tripCategories": { "type": "array" },
         "priceRanges": { "type": "array" },
         "durationRanges": { "type": "array" },
+        "groupDiscounts": { "type": "array" },
         "whyMetrics": { "type": "array" },
         "whyItems": { "type": "array" },
         "basecampAddress": { "type": "string", "maxLength": 300 },

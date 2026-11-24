@@ -1,6 +1,7 @@
 import React from 'react';
-import { Lock, Mail, MapPin, Phone } from 'lucide-react';
+import { Mail, MapPin, Phone } from 'lucide-react';
 import type { SiteContent } from '../types/trip';
+import { splitCopyrightTrigger } from '../utils/tripLogic';
 import type { AppView } from './Navbar';
 
 interface FooterProps {
@@ -18,14 +19,24 @@ export const Footer: React.FC<FooterProps> = ({
     ? `+${whatsappNumber.slice(0, 2)} ${whatsappNumber.slice(2, 5)}-${whatsappNumber.slice(5, 9)}-${whatsappNumber.slice(9)}`
     : whatsappNumber;
 
+  const { triggerText, restText } = splitCopyrightTrigger(siteContent.copyrightText);
+
   return (
     <footer className="bg-[#132A1E] text-[#F6F5F0]/90 border-t border-[#1B3B2B]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
           <div className="md:col-span-5 space-y-3">
-            <p className="text-xl font-bold tracking-tight font-display text-white">
-              {siteContent.brandName}
-            </p>
+            <div className="flex items-center gap-2.5">
+              <img
+                src={siteContent.brandLogoUrl || '/logo-dexxdigital.svg'}
+                alt=""
+                aria-hidden="true"
+                className="w-8 h-8 rounded-lg object-contain shrink-0"
+              />
+              <p className="text-xl font-bold tracking-tight font-display text-white">
+                {siteContent.brandName}
+              </p>
+            </div>
             <p className="text-sm leading-relaxed text-[#F6F5F0]/75 max-w-md">
               {siteContent.footerDescription}
             </p>
@@ -88,19 +99,18 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         <div className="mt-12 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#F6F5F0]/55">
-          <p>{siteContent.copyrightText}</p>
-
-          {/* Hidden / Discreet Admin CMS Access */}
-          <button
-            type="button"
-            onClick={() => onNavigate('admin')}
-            data-testid="hidden-admin-trigger"
-            className="inline-flex items-center gap-1.5 text-xs text-[#F6F5F0]/45 hover:text-[#F6F5F0]/90 transition-colors cursor-pointer py-1 px-2 rounded focus-visible:outline-2 focus-visible:outline-[#C85A32]"
-            title="Panel Manajemen Konten & Leads"
-          >
-            <Lock className="w-3 h-3" aria-hidden="true" />
-            <span>Akses Pengelola</span>
-          </button>
+          <p>
+            <button
+              type="button"
+              onClick={() => onNavigate('admin')}
+              data-testid="hidden-admin-trigger"
+              aria-label="© 2026"
+              className="text-inherit font-inherit p-0 m-0 bg-transparent border-0 cursor-default hover:text-[#F6F5F0]/80 transition-colors focus-visible:outline-1 focus-visible:outline-[#C85A32]"
+            >
+              {triggerText}
+            </button>
+            <span>{restText}</span>
+          </p>
         </div>
       </div>
     </footer>

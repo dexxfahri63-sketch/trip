@@ -114,6 +114,7 @@ export function sanitizeGuideForFirestore(guide: TourGuide): TourGuide {
     experienceYears: Math.min(80, Math.max(0, Number(guide.experienceYears) || 1)),
     tripsLed: Math.min(10000, Math.max(0, Number(guide.tripsLed) || 1)),
     bio: clampString(guide.bio || '', 1500),
+    photoUrl: clampString(guide.photoUrl || '', 450000),
   };
 }
 
@@ -170,6 +171,7 @@ export function sanitizeLandingForFirestore(landing: LandingSettings): LandingSe
 export function sanitizeSiteContentForFirestore(sc: SiteContent): SiteContent {
   return {
     brandName: clampString(sc.brandName || 'DexxDigital', 120),
+    brandLogoUrl: clampString(sc.brandLogoUrl || '/logo-dexxdigital.svg', 450000),
     headerCtaText: clampString(sc.headerCtaText || 'Pesan Trip', 80),
     navHomeLabel: clampString(sc.navHomeLabel || 'Beranda', 60),
     navCatalogLabel: clampString(sc.navCatalogLabel || 'Katalog Trip', 60),
@@ -177,6 +179,19 @@ export function sanitizeSiteContentForFirestore(sc: SiteContent): SiteContent {
     navWhyLabel: clampString(sc.navWhyLabel || 'Keunggulan', 60),
     heroKicker: clampString(sc.heroKicker || '', 200),
     heroSecondaryCtaText: clampString(sc.heroSecondaryCtaText || '', 100),
+    clientsKicker: clampString(sc.clientsKicker || 'Dipercaya Klien & Mitra Ekspedisi', 120),
+    clientsTitle: clampString(
+      sc.clientsTitle || 'Komunitas & Perusahaan yang Telah Berangkat Bersama Kami',
+      200
+    ),
+    clientLogos: (Array.isArray(sc.clientLogos) ? sc.clientLogos : [])
+      .slice(0, 20)
+      .map((item, idx) => ({
+        id: clampString(item.id || `client-${idx + 1}`, 80),
+        name: clampString(item.name || 'Klien Mitra', 120),
+        sector: clampString(item.sector || '', 120),
+        logoUrl: clampString(item.logoUrl || '', 450000),
+      })),
     searchDestinationLabel: clampString(sc.searchDestinationLabel || 'Destinasi Tujuan', 80),
     searchAllDestinationsLabel: clampString(
       sc.searchAllDestinationsLabel || 'Semua Destinasi',
@@ -241,6 +256,14 @@ export function sanitizeSiteContentForFirestore(sc: SiteContent): SiteContent {
     ),
     priceRanges: (Array.isArray(sc.priceRanges) ? sc.priceRanges : []).slice(0, 20),
     durationRanges: (Array.isArray(sc.durationRanges) ? sc.durationRanges : []).slice(0, 20),
+    groupDiscounts: (Array.isArray(sc.groupDiscounts) ? sc.groupDiscounts : [])
+      .slice(0, 15)
+      .map((tier, idx) => ({
+        id: clampString(tier.id || `grp-${idx + 1}`, 60),
+        minParticipants: Math.min(100, Math.max(2, Math.floor(Number(tier.minParticipants) || 2))),
+        discountPercent: Math.min(90, Math.max(1, Math.round(Number(tier.discountPercent) || 5))),
+        label: clampString(tier.label || '', 100),
+      })),
     detailBackText: clampString(sc.detailBackText || 'Kembali ke Katalog Trip', 80),
     detailSummaryTitle: clampString(sc.detailSummaryTitle || 'Ringkasan Perjalanan', 120),
     detailItineraryTitle: clampString(sc.detailItineraryTitle || 'Itinerary Harian', 120),

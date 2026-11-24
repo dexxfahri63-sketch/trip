@@ -93,7 +93,7 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'id', 'name', 'specialty', 'certification',
-          'experienceYears', 'tripsLed', 'bio'
+          'experienceYears', 'tripsLed', 'bio', 'photoUrl'
         ]) &&
         isValidId(data.id) &&
         isValidString(data.name, 1, 120) &&
@@ -101,7 +101,8 @@ service cloud.firestore {
         isValidString(data.certification, 0, 240) &&
         data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80 &&
         data.tripsLed is number && data.tripsLed >= 0 && data.tripsLed <= 10000 &&
-        isValidString(data.bio, 0, 1500);
+        isValidString(data.bio, 0, 1500) &&
+        isValidOptionalString(data, 'photoUrl', 450000);
     }
 
     function isValidGalleryItem(data) {
@@ -168,8 +169,9 @@ service cloud.firestore {
           'footerDescription', 'basecampAddress', 'contactEmail', 'copyrightText'
         ]) &&
         data.keys().hasOnly([
-          'brandName', 'headerCtaText', 'navHomeLabel', 'navCatalogLabel',
+          'brandName', 'brandLogoUrl', 'headerCtaText', 'navHomeLabel', 'navCatalogLabel',
           'navGalleryLabel', 'navWhyLabel', 'heroKicker', 'heroSecondaryCtaText',
+          'clientsKicker', 'clientsTitle', 'clientLogos',
           'searchDestinationLabel', 'searchAllDestinationsLabel', 'searchDateLabel',
           'searchDurationLabel', 'searchAllDurationsLabel', 'searchButtonText',
           'popularKicker', 'popularTitle', 'popularViewAllText', 'popularPricePrefix',
@@ -180,7 +182,7 @@ service cloud.firestore {
           'catalogPriceFilterLabel', 'catalogAllPricesLabel', 'catalogDurationFilterLabel',
           'catalogDateFilterLabel', 'catalogSortLabel', 'catalogCardPriceLabel',
           'catalogCardButtonText', 'catalogEmptyTitle', 'catalogEmptySubtitle',
-          'priceRanges', 'durationRanges', 'detailBackText', 'detailSummaryTitle',
+          'priceRanges', 'durationRanges', 'groupDiscounts', 'detailBackText', 'detailSummaryTitle',
           'detailItineraryTitle', 'detailFacilitiesTitle', 'detailIncludedTitle',
           'detailExcludedTitle', 'detailMeetingPointTitle', 'detailBookingCtaText',
           'detailWhatsappCtaText', 'galleryKicker', 'galleryTitle', 'gallerySubtitle',
@@ -189,9 +191,13 @@ service cloud.firestore {
           'basecampAddress', 'contactEmail', 'copyrightText', 'tripCategories'
         ]) &&
         isValidString(data.brandName, 1, 120) &&
+        isValidOptionalString(data, 'brandLogoUrl', 450000) &&
         isValidString(data.headerCtaText, 1, 80) &&
         isValidString(data.heroKicker, 0, 200) &&
         isValidString(data.heroSecondaryCtaText, 0, 100) &&
+        isValidOptionalString(data, 'clientsKicker', 120) &&
+        isValidOptionalString(data, 'clientsTitle', 200) &&
+        (!('clientLogos' in data) || (data.clientLogos is list && data.clientLogos.size() <= 20)) &&
         isValidString(data.popularKicker, 0, 120) &&
         isValidString(data.popularTitle, 0, 200) &&
         isValidString(data.whyKicker, 0, 120) &&
@@ -220,6 +226,7 @@ service cloud.firestore {
         data.whyItems is list && data.whyItems.size() <= 20 &&
         (!('priceRanges' in data) || (data.priceRanges is list && data.priceRanges.size() <= 20)) &&
         (!('durationRanges' in data) || (data.durationRanges is list && data.durationRanges.size() <= 20)) &&
+        (!('groupDiscounts' in data) || (data.groupDiscounts is list && data.groupDiscounts.size() <= 15)) &&
         (!('tripCategories' in data) || (data.tripCategories is list && data.tripCategories.size() <= 30));
     }
 

@@ -1,13 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addRecentSearchQuery,
   buildWhatsAppBookingUrl,
+  calculateGroupPricing,
   calculateTotalPrice,
   filterGalleryItems,
   filterTrips,
   formatIDR,
   getAvailableTripCategories,
+  normalizeGroupDiscountTiers,
+  resolveGroupDiscount,
   slugifyTripTitle,
+  splitCopyrightTrigger,
   validateBookingInput,
   validatePinChangeInput,
 } from './tripLogic';
@@ -298,6 +303,90 @@ test('filterTrips filters accurately using custom configured priceRanges and dur
     ['t3']
   );
 });
+
+test('splitCopyrightTrigger isolates leading © YYYY trigger cleanly', () => {
+  const res = splitCopyrightTrigger('© 2026 DexxDigital Open Trip.');
+  assert.equal(res.triggerText, '© 2026');
+  assert.equal(res.restText, ' DexxDigital Open Trip.');
+
+  const custom = splitCopyrightTrigger('DexxDigital Studio');
+  assert.equal(custom.triggerText, '© 2026');
+  assert.equal(custom.restText, ' DexxDigital Studio');
+});
+
+test('addRecentSearchQuery keeps max 3 unique case-insensitive recent queries in LIFO order', () => {
+  let list: string[] = [];
+  list = addRecentSearchQuery(list, '   ');
+  assert.deepEqual(list, []);
+
+  list = addRecentSearchQuery(list, 'Rinjani');
+  list = addRecentSearchQuery(list, 'Komodo');
+  list = addRecentSearchQuery(list, 'Bromo');
+  assert.deepEqual(list, ['Bromo', 'Komodo', 'Rinjani']);
+
+  // Duplicate moves to top with latest casing
+  list = addRecentSearchQuery(list, 'rinjani');
+  assert.deepEqual(list, ['rinjani', 'Bromo', 'Komodo']);
+
+  // 4th distinct query evicts oldest
+  list = addRecentSearchQuery(list, 'Nusa Penida');
+  assert.deepEqual(list, ['Nusa Penida', 'rinjani', 'Bromo']);
+});
+
+test('resolveGroupDiscount and calculateGroupPricing apply highest matching custom tier', () => {
+  const tiers = [
+    { id: 't10', minParticipants: 10, discountPercent: 15, label: 'Rombongan Besar' },
+    { id: 't5', minParticipants: 5, discountPercent: 10, label: 'Rombongan Kecil' },
+  ];
+
+  // Unsorted input is normalized ascending
+  const normalized = normalizeGroupDiscountTiers(tiers);
+  assert.deepEqual(
+    normalized.map((t) => t.minParticipants),
+    [5, 10]
+  );
+
+  // 3 participants -> 0% discount, next tier is 5+
+  const p3 = calculateGroupPricing(1000000, 3, tiers);
+  assert.equal(p3.discountPercent, 0);
+  assert.equal(p3.originalSubtotal, 3000000);
+  assert.equal(p3.totalPrice, 3000000);
+  assert.equal(p3.nextTier?.minParticipants, 5);
+
+  // 5 participants -> 10% discount, next tier is 10+
+  const p5 = calculateGroupPricing(1000000, 5, tiers);
+  assert.equal(p5.discountPercent, 10);
+  assert.equal(p5.originalSubtotal, 5000000);
+  assert.equal(p5.discountAmount, 500000);
+  assert.equal(p5.totalPrice, 4500000);
+  assert.equal(p5.discountedUnitPrice, 900000);
+  assert.equal(p5.nextTier?.minParticipants, 10);
+
+  // 12 participants -> 15% discount, no next tier
+  const p12 = calculateGroupPricing(1000000, 12, tiers);
+  assert.equal(p12.discountPercent, 15);
+  assert.equal(p12.totalPrice, 10200000);
+  assert.equal(p12.nextTier, null);
+
+  // Empty array explicitly disables group discounts
+  const disabled = resolveGroupDiscount(10, []);
+  assert.equal(disabled.discountPercent, 0);
+  assert.equal(disabled.tiers.length, 0);
+});
+
+test('buildWhatsAppBookingUrl includes group discount info when discountPercent > 0', () => {
+  const url = buildWhatsAppBookingUrl('081234567890', {
+    tripTitle: 'Phinisi Komodo',
+    customerName: 'Rina',
+    departureDate: '2026-12-18',
+    participants: 5,
+    totalEstimatedPrice: 18000000,
+    discountPercent: 10,
+  });
+  assert.ok(url.includes(encodeURIComponent('Hemat 10%')));
+});
+
+
 
 
 
