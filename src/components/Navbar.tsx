@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, X } from 'lucide-react';
+import { resolveAssetUrl } from '../utils/assetMap';
 
 export type AppView = 'landing' | 'catalog' | 'detail' | 'gallery' | 'admin';
 
@@ -45,9 +46,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="inline-flex items-center gap-2.5 text-xl font-bold tracking-tight text-[#1B3B2B] font-display whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C85A32] focus-visible:outline-offset-4"
         >
           <img
-            src={brandLogoUrl || '/logo-dexxdigital.svg'}
+            src={brandLogoUrl ? resolveAssetUrl(brandLogoUrl) : '/logo-dexxdigital.svg'}
             alt=""
             aria-hidden="true"
+            onError={(e) => {
+              if (!e.currentTarget.src.endsWith('/logo-dexxdigital.svg')) {
+                e.currentTarget.src = '/logo-dexxdigital.svg';
+              }
+            }}
             className="w-8 h-8 rounded-lg object-contain shrink-0"
           />
           <span>{brandName}</span>

@@ -6,6 +6,10 @@ import tripBandung from '../assets/images/trip_bandung_heritage_1794756900870.jp
 import guideSummit from '../assets/images/guide_action_summit_1794756902427.jpg';
 import guideOcean from '../assets/images/guide_action_ocean_1794756902658.jpg';
 import guideCamp from '../assets/images/guide_action_camp_1794756903075.jpg';
+import guidePortraitRaka from '../assets/images/guide_portrait_raka_1795012889559.jpg';
+import guidePortraitBagus from '../assets/images/guide_portrait_bagus_1795012890204.jpg';
+import guidePortraitSinta from '../assets/images/guide_portrait_sinta_1795012890977.jpg';
+import guidePortraitDewi from '../assets/images/guide_portrait_dewi_1795012890280.jpg';
 
 const ASSET_MAP: Record<string, string> = {
   '/src/assets/images/hero_rinjani_expedition_1794756899898.jpg': heroRinjani,
@@ -16,6 +20,10 @@ const ASSET_MAP: Record<string, string> = {
   '/src/assets/images/guide_action_summit_1794756902427.jpg': guideSummit,
   '/src/assets/images/guide_action_ocean_1794756902658.jpg': guideOcean,
   '/src/assets/images/guide_action_camp_1794756903075.jpg': guideCamp,
+  '/src/assets/images/guide_portrait_raka_1795012889559.jpg': guidePortraitRaka,
+  '/src/assets/images/guide_portrait_bagus_1795012890204.jpg': guidePortraitBagus,
+  '/src/assets/images/guide_portrait_sinta_1795012890977.jpg': guidePortraitSinta,
+  '/src/assets/images/guide_portrait_dewi_1795012890280.jpg': guidePortraitDewi,
 };
 
 export const AVAILABLE_ASSET_OPTIONS = [

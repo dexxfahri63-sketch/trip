@@ -27,6 +27,7 @@ import {
   FIREBASE_PROJECT_ID,
   FIRESTORE_DATABASE_ID,
   handleFirestoreError,
+  logFirestoreListenerError,
   OperationType,
 } from '../lib/firebase';
 
@@ -344,7 +345,7 @@ export function subscribePublicFirestoreStore(
         notifyMeta();
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'trips');
+        logFirestoreListenerError(error, OperationType.LIST, 'trips');
       }
     )
   );
@@ -358,7 +359,7 @@ export function subscribePublicFirestoreStore(
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'guides');
+        logFirestoreListenerError(error, OperationType.LIST, 'guides');
       }
     )
   );
@@ -372,7 +373,7 @@ export function subscribePublicFirestoreStore(
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'gallery');
+        logFirestoreListenerError(error, OperationType.LIST, 'gallery');
       }
     )
   );
@@ -386,7 +387,7 @@ export function subscribePublicFirestoreStore(
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'testimonials');
+        logFirestoreListenerError(error, OperationType.LIST, 'testimonials');
       }
     )
   );
@@ -400,7 +401,7 @@ export function subscribePublicFirestoreStore(
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'siteSettings/landing');
+        logFirestoreListenerError(error, OperationType.GET, 'siteSettings/landing');
       }
     )
   );
@@ -416,7 +417,7 @@ export function subscribePublicFirestoreStore(
         notifyMeta();
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'siteSettings/content');
+        logFirestoreListenerError(error, OperationType.GET, 'siteSettings/content');
       }
     )
   );
@@ -455,7 +456,7 @@ export function subscribeLeadsFromFirestore(
       onLeads(items);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'leads');
+      logFirestoreListenerError(error, OperationType.LIST, 'leads');
     }
   );
 }

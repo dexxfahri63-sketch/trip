@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { MotionConfig } from 'motion/react';
 import type { BookingLead, StoreDatabase, TripPackage } from './types/trip';
 import { INITIAL_STORE_DATA } from './data/seedData';
+import { resolveAssetUrl } from './utils/assetMap';
 import type { TripFilterCriteria } from './utils/tripLogic';
 import {
   ADMIN_EMAIL,
@@ -38,9 +39,7 @@ function mergeSiteContent(
     ...(incoming || {}),
     brandLogoUrl: incoming?.brandLogoUrl || base.brandLogoUrl,
     clientLogos:
-      incoming?.clientLogos && incoming.clientLogos.length > 0
-        ? incoming.clientLogos
-        : base.clientLogos,
+      incoming?.clientLogos !== undefined ? incoming.clientLogos : base.clientLogos,
     priceRanges:
       incoming?.priceRanges && incoming.priceRanges.length > 0
         ? incoming.priceRanges
@@ -215,7 +214,9 @@ export default function App() {
 
   // Sync browser tab favicon dynamically if brandLogoUrl is customized
   useEffect(() => {
-    const iconHref = store.siteContent.brandLogoUrl || '/favicon.svg';
+    const iconHref = store.siteContent.brandLogoUrl
+      ? resolveAssetUrl(store.siteContent.brandLogoUrl)
+      : '/favicon.svg';
     const links = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']");
     if (links.length > 0) {
       links.forEach((link) => {
@@ -461,6 +462,7 @@ export default function App() {
             />
           ) : currentView === 'detail' && selectedTrip ? (
             <TripDetailPage
+              key={selectedTrip.id}
               trip={selectedTrip}
               siteContent={store.siteContent}
               whatsappNumber={store.landing.whatsappNumber}

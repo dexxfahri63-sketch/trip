@@ -52,12 +52,12 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(
+function buildFirestoreErrorInfo(
   error: unknown,
   operationType: OperationType,
   path: string | null
-): never {
-  const errInfo: FirestoreErrorInfo = {
+): FirestoreErrorInfo {
+  return {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid ?? null,
@@ -74,6 +74,23 @@ export function handleFirestoreError(
     operationType,
     path,
   };
+}
+
+export function logFirestoreListenerError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): void {
+  const errInfo = buildFirestoreErrorInfo(error, operationType, path);
+  console.warn('Firestore Listener Error: ', JSON.stringify(errInfo));
+}
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): never {
+  const errInfo = buildFirestoreErrorInfo(error, operationType, path);
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }

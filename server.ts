@@ -84,7 +84,7 @@ function ensureStore(): PersistedStore {
         brandLogoUrl:
           parsed.siteContent?.brandLogoUrl || INITIAL_STORE_DATA.siteContent.brandLogoUrl,
         clientLogos:
-          parsed.siteContent?.clientLogos && parsed.siteContent.clientLogos.length > 0
+          parsed.siteContent?.clientLogos !== undefined
             ? parsed.siteContent.clientLogos
             : INITIAL_STORE_DATA.siteContent.clientLogos,
         tripCategories:
@@ -232,7 +232,11 @@ async function startServer() {
       return;
     }
 
-    const id = payload.id || `trip-${Date.now()}`;
+    const rawId =
+      typeof payload.id === 'string' && payload.id.trim()
+        ? payload.id.trim().replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 120)
+        : '';
+    const id = rawId || `trip-${Date.now()}`;
     const cleanCategory = payload.category.trim();
     const currentCats =
       store.siteContent.tripCategories || INITIAL_STORE_DATA.siteContent.tripCategories || [];
@@ -247,9 +251,11 @@ async function startServer() {
       destination: payload.destination.trim(),
       region: (payload.region || 'Indonesia').trim(),
       category: cleanCategory,
-      durationDays: Number(payload.durationDays) || 2,
-      durationLabel: payload.durationLabel || `${Number(payload.durationDays) || 2} Hari`,
-      pricePerPerson: Number(payload.pricePerPerson) || 1500000,
+      durationDays: Math.min(60, Math.max(1, Math.floor(Number(payload.durationDays) || 2))),
+      durationLabel:
+        payload.durationLabel ||
+        `${Math.min(60, Math.max(1, Math.floor(Number(payload.durationDays) || 2)))} Hari`,
+      pricePerPerson: Math.min(500000000, Math.max(0, Number(payload.pricePerPerson) || 1500000)),
       rating: Number(payload.rating) || 4.9,
       reviewCount: Number(payload.reviewCount) || 1,
       difficulty: payload.difficulty || 'Menengah',
@@ -519,17 +525,24 @@ async function startServer() {
       return;
     }
 
+    const rawLeadId =
+      typeof payload.id === 'string' && payload.id.trim()
+        ? payload.id.trim().replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 120)
+        : '';
     const newLead: BookingLead = {
-      id: payload.id || `lead-${Date.now()}`,
-      tripId: payload.tripId || 'custom',
-      tripTitle: payload.tripTitle,
-      customerName: payload.customerName.trim(),
-      whatsapp: payload.whatsapp.trim(),
-      email: (payload.email || '').trim(),
-      departureDate: payload.departureDate || '',
-      participants: Number(payload.participants) || 1,
-      totalEstimatedPrice: Number(payload.totalEstimatedPrice) || 0,
-      notes: (payload.notes || '').trim(),
+      id: rawLeadId || `lead-${Date.now()}`,
+      tripId: String(payload.tripId || 'custom').slice(0, 128),
+      tripTitle: String(payload.tripTitle).trim().slice(0, 200),
+      customerName: payload.customerName.trim().slice(0, 120),
+      whatsapp: payload.whatsapp.trim().slice(0, 30),
+      email: String(payload.email || '').trim().slice(0, 120),
+      departureDate: String(payload.departureDate || '').trim().slice(0, 40),
+      participants: Math.min(30, Math.max(1, Math.floor(Number(payload.participants) || 1))),
+      totalEstimatedPrice: Math.min(
+        2000000000,
+        Math.max(0, Math.round(Number(payload.totalEstimatedPrice) || 0))
+      ),
+      notes: String(payload.notes || '').trim().slice(0, 1000),
       status: 'Baru',
       createdAt: new Date().toISOString(),
     };
@@ -563,8 +576,16 @@ async function startServer() {
     res.json({ deleted: true, id });
   });
 
+  app.use('/api/*', (_req, res) => {
+    res.status(404).json({ error: 'Endpoint API tidak ditemukan.' });
+  });
+
   // Vite middleware in dev, static serving in production
-  const isProd = process.env.NODE_ENV === 'production';
+  const distPath = path.join(__dirname, 'dist');
+  const isProd =
+    process.env.NODE_ENV === 'production' ||
+    (process.env.npm_lifecycle_event === 'start' &&
+      fs.existsSync(path.join(distPath, 'index.html')));
   if (!isProd) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -572,7 +593,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

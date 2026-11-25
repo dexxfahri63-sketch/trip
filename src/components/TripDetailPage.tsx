@@ -44,6 +44,7 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
   const allPhotos =
     trip.galleryImages.length > 0 ? trip.galleryImages : [trip.coverImage];
   const [selectedPhoto, setSelectedPhoto] = useState(allPhotos[0]);
+  const activePhoto = allPhotos.includes(selectedPhoto) ? selectedPhoto : allPhotos[0];
   const [expandedDays, setExpandedDays] = useState<number[]>(
     trip.itinerary.length > 0 ? [trip.itinerary[0].day] : []
   );
@@ -52,10 +53,12 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [email, setEmail] = useState('');
-  const [departureDate, setDepartureDate] = useState(
-    trip.nextDepartures[0] || '2026-12-20'
+  const departureOptions =
+    trip.nextDepartures.length > 0 ? trip.nextDepartures : ['2026-12-20'];
+  const [departureDate, setDepartureDate] = useState(departureOptions[0]);
+  const [participants, setParticipants] = useState(() =>
+    Math.min(2, Math.max(1, trip.maxParticipants || 2))
   );
-  const [participants, setParticipants] = useState(2);
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -220,7 +223,7 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
             <div className="space-y-3">
               <div className="aspect-[16/9] w-full rounded-xl overflow-hidden bg-[#EDEBE4] border border-[#E2DFD5]">
                 <ResilientImage
-                  src={selectedPhoto}
+                  src={activePhoto}
                   alt={`${trip.title} - foto utama`}
                   fallbackTitle={trip.title}
                   className="w-full h-full object-cover"
@@ -236,7 +239,7 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
                       onClick={() => setSelectedPhoto(imgUrl)}
                       aria-label={`Pilih foto galeri ${idx + 1}`}
                       className={`aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                        selectedPhoto === imgUrl
+                        activePhoto === imgUrl
                           ? 'border-[#C85A32]'
                           : 'border-transparent opacity-75 hover:opacity-100'
                       }`}
@@ -560,7 +563,7 @@ export const TripDetailPage: React.FC<TripDetailPageProps> = ({
                         onChange={(e) => setDepartureDate(e.target.value)}
                         className="w-full pl-9 pr-3 py-2.5 text-sm text-[#17231D] bg-[#F6F5F0] border border-[#E2DFD5] rounded-lg focus:outline-none focus:border-[#1B3B2B] tabular-nums"
                       >
-                        {trip.nextDepartures.map((d) => (
+                        {departureOptions.map((d) => (
                           <option key={d} value={d}>
                             {d}
                           </option>

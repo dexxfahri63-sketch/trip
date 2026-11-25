@@ -1,6 +1,7 @@
 import React from 'react';
 import { Mail, MapPin, Phone } from 'lucide-react';
 import type { SiteContent } from '../types/trip';
+import { resolveAssetUrl } from '../utils/assetMap';
 import { splitCopyrightTrigger } from '../utils/tripLogic';
 import type { AppView } from './Navbar';
 
@@ -28,9 +29,18 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="md:col-span-5 space-y-3">
             <div className="flex items-center gap-2.5">
               <img
-                src={siteContent.brandLogoUrl || '/logo-dexxdigital.svg'}
+                src={
+                  siteContent.brandLogoUrl
+                    ? resolveAssetUrl(siteContent.brandLogoUrl)
+                    : '/logo-dexxdigital.svg'
+                }
                 alt=""
                 aria-hidden="true"
+                onError={(e) => {
+                  if (!e.currentTarget.src.endsWith('/logo-dexxdigital.svg')) {
+                    e.currentTarget.src = '/logo-dexxdigital.svg';
+                  }
+                }}
                 className="w-8 h-8 rounded-lg object-contain shrink-0"
               />
               <p className="text-xl font-bold tracking-tight font-display text-white">

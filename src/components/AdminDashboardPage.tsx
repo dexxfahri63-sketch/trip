@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Award,
@@ -162,7 +162,7 @@ interface AdminDashboardPageProps {
   onExitAdmin: () => void;
   onLogout: () => void;
   onAuthExpired: () => void;
-  onStoreChange: (nextStore: StoreDatabase) => void;
+  onStoreChange: React.Dispatch<React.SetStateAction<StoreDatabase>>;
 }
 
 const LEAD_STATUSES: LeadStatus[] = [
@@ -278,7 +278,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       })
       .then((leads) => {
         if (active && leads && !isFirebaseAdmin) {
-          onStoreChange({ ...store, leads });
+          onStoreChange((prev) => ({ ...prev, leads }));
         }
       })
       .catch(() => {});
@@ -288,10 +288,26 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken, isFirebaseAdmin]);
 
+  const toastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   const showToast = (msg: string) => {
     setErrorMsg('');
     setNotice(msg);
-    setTimeout(() => setNotice(''), 3500);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setNotice('');
+      toastTimerRef.current = null;
+    }, 3500);
   };
 
   const showError = (msg: string) => {
@@ -368,12 +384,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           updatedLead = (await res.json()) as BookingLead;
         }
       }
-      onStoreChange({
-        ...store,
-        leads: store.leads.map((l) =>
+      onStoreChange((prev) => ({
+        ...prev,
+        leads: prev.leads.map((l) =>
           l.id === leadId ? { ...(updatedLead || l), status } : l
         ),
-      });
+      }));
       showToast(
         `Status pesanan ${updatedLead?.customerName || leadId} diubah ke ${status}.`
       );
@@ -396,10 +412,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           await handleFetchError(res, 'Gagal menghapus pesanan.');
         }
       }
-      onStoreChange({
-        ...store,
-        leads: store.leads.filter((l) => l.id !== leadId),
-      });
+      onStoreChange((prev) => ({
+        ...prev,
+        leads: prev.leads.filter((l) => l.id !== leadId),
+      }));
       showToast('Data pesanan dihapus.');
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal menghapus data.'));
@@ -497,7 +513,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       const dataUrl = await readImageAsDataUrl(file);
       setEditingTrip((prev) => {
         if (!prev) return prev;
-        const others = prev.galleryImages.filter((img) => img !== prev.coverImage);
+        const others = prev.galleryImages.filter(
+          (img) => img !== prev.coverImage && img !== dataUrl
+        );
         return {
           ...prev,
           coverImage: dataUrl,
@@ -570,7 +588,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           saved = (await res.json()) as SiteContent;
         }
       }
-      onStoreChange({ ...store, siteContent: saved });
+      onStoreChange((prev) => ({ ...prev, siteContent: saved }));
       setSiteDraft(normalizeSiteContentDraft(saved));
       setNewCategoryInput('');
       showToast(`Kategori "${clean}" ditambahkan ke daftar.`);
@@ -620,7 +638,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           saved = (await res.json()) as SiteContent;
         }
       }
-      onStoreChange({ ...store, siteContent: saved });
+      onStoreChange((prev) => ({ ...prev, siteContent: saved }));
       setSiteDraft(normalizeSiteContentDraft(saved));
       showToast(`Kategori "${catToRemove}" dihapus.`);
     } catch (err) {
@@ -700,8 +718,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         await saveSiteContentToFirestore(nextSiteContent);
       }
 
-      onStoreChange({ ...store, trips: nextTrips, siteContent: nextSiteContent });
-      setSiteDraft(nextSiteContent);
+      onStoreChange((prev) => ({ ...prev, trips: nextTrips, siteContent: nextSiteContent }));
+      setSiteDraft(normalizeSiteContentDraft(nextSiteContent));
       setEditingTrip(null);
       showToast(
         isNewTrip
@@ -732,10 +750,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           saved = (await res.json()) as TripPackage;
         }
       }
-      onStoreChange({
-        ...store,
-        trips: store.trips.map((t) => (t.id === saved.id ? saved : t)),
-      });
+      onStoreChange((prev) => ({
+        ...prev,
+        trips: prev.trips.map((t) => (t.id === saved.id ? saved : t)),
+      }));
       showToast(`Status populer "${saved.title}" diperbarui.`);
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal memperbarui.'));
@@ -756,10 +774,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           await handleFetchError(res, 'Gagal menghapus paket trip.');
         }
       }
-      onStoreChange({
-        ...store,
-        trips: store.trips.filter((t) => t.id !== trip.id),
-      });
+      onStoreChange((prev) => ({
+        ...prev,
+        trips: prev.trips.filter((t) => t.id !== trip.id),
+      }));
       showToast(`Paket "${trip.title}" dihapus dari katalog.`);
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal menghapus.'));
@@ -854,10 +872,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         }
       }
 
-      const nextGallery = editingGalleryId
-        ? store.gallery.map((g) => (g.id === saved.id ? saved : g))
-        : [saved, ...store.gallery.filter((g) => g.id !== saved.id)];
-      onStoreChange({ ...store, gallery: nextGallery });
+      onStoreChange((prev) => ({
+        ...prev,
+        gallery: editingGalleryId
+          ? prev.gallery.map((g) => (g.id === saved.id ? saved : g))
+          : [saved, ...prev.gallery.filter((g) => g.id !== saved.id)],
+      }));
       setGalleryFormOpen(false);
       showToast('Dokumentasi galeri berhasil disimpan.');
     } catch (err) {
@@ -879,10 +899,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           await handleFetchError(res, 'Gagal menghapus item galeri.');
         }
       }
-      onStoreChange({
-        ...store,
-        gallery: store.gallery.filter((g) => g.id !== id),
-      });
+      onStoreChange((prev) => ({
+        ...prev,
+        gallery: prev.gallery.filter((g) => g.id !== id),
+      }));
       showToast('Dokumentasi galeri dihapus.');
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal menghapus.'));
@@ -987,20 +1007,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         }
       }
 
-      const nextGuides = isNew
-        ? [...store.guides, saved]
-        : store.guides.map((g) => (g.id === saved.id ? saved : g));
-      const nextGallery = store.gallery.map((item) =>
-        item.guideId === saved.id ? { ...item, guideName: saved.name } : item
-      );
-      if (isFirebaseAdmin) {
-        for (const item of nextGallery) {
-          if (item.guideId === saved.id) {
-            await saveGalleryItemToFirestore(item);
-          }
-        }
-      }
-      onStoreChange({ ...store, guides: nextGuides, gallery: nextGallery });
+      onStoreChange((prev) => ({
+        ...prev,
+        guides: isNew
+          ? [...prev.guides, saved]
+          : prev.guides.map((g) => (g.id === saved.id ? saved : g)),
+        gallery: prev.gallery.map((item) =>
+          item.guideId === saved.id ? { ...item, guideName: saved.name } : item
+        ),
+      }));
       setGuideFormOpen(false);
       setEditingGuide(null);
       showToast(`Profil Tour Guide "${saved.name}" disimpan.`);
@@ -1023,10 +1038,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           await handleFetchError(res, 'Gagal menghapus Tour Guide.');
         }
       }
-      onStoreChange({
-        ...store,
-        guides: store.guides.filter((g) => g.id !== id),
-      });
+      onStoreChange((prev) => ({
+        ...prev,
+        guides: prev.guides.filter((g) => g.id !== id),
+      }));
       showToast('Profil Tour Guide dihapus.');
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal menghapus.'));
@@ -1083,10 +1098,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         }
       }
 
-      const nextTesti = isNew
-        ? [saved, ...store.testimonials.filter((t) => t.id !== saved.id)]
-        : store.testimonials.map((t) => (t.id === saved.id ? saved : t));
-      onStoreChange({ ...store, testimonials: nextTesti });
+      onStoreChange((prev) => ({
+        ...prev,
+        testimonials: isNew
+          ? [saved, ...prev.testimonials.filter((t) => t.id !== saved.id)]
+          : prev.testimonials.map((t) => (t.id === saved.id ? saved : t)),
+      }));
       setTestiFormOpen(false);
       setEditingTesti(null);
       showToast(`Testimoni dari "${saved.name}" disimpan.`);
@@ -1109,10 +1126,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           await handleFetchError(res, 'Gagal menghapus testimoni.');
         }
       }
-      onStoreChange({
-        ...store,
-        testimonials: store.testimonials.filter((t) => t.id !== id),
-      });
+      onStoreChange((prev) => ({
+        ...prev,
+        testimonials: prev.testimonials.filter((t) => t.id !== id),
+      }));
       showToast('Testimoni dihapus.');
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal menghapus.'));
@@ -1140,7 +1157,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           saved = (await res.json()) as LandingSettings;
         }
       }
-      onStoreChange({ ...store, landing: saved });
+      onStoreChange((prev) => ({ ...prev, landing: saved }));
       showToast('Pengaturan Hero & Banner Promosi disimpan.');
     } catch (err) {
       showError(extractErrorMessage(err, 'Gagal menyimpan.'));
@@ -1207,7 +1224,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           saved = (await res.json()) as SiteContent;
         }
       }
-      onStoreChange({ ...store, siteContent: saved });
+      onStoreChange((prev) => ({ ...prev, siteContent: saved }));
       setSiteDraft(normalizeSiteContentDraft(saved));
       showToast('Seluruh teks web, katalog, rentang harga, durasi & kontak diperbarui.');
     } catch (err) {
@@ -1220,6 +1237,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   // --- SECURITY PIN / PASSWORD HANDLER ---
   const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!adminToken) {
+      showError(
+        'Untuk mengubah PIN/kata sandi lokal, masuk terlebih dahulu menggunakan PIN/kata sandi pengelola.'
+      );
+      return;
+    }
     const validation = validatePinChangeInput({
       currentPin,
       newPin,
@@ -3964,15 +3987,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               type="number"
                               min={2}
                               max={100}
-                              value={tier.minParticipants}
+                              value={tier.minParticipants || ''}
                               onChange={(e) => {
-                                const val = Math.min(
-                                  100,
-                                  Math.max(2, Math.floor(Number(e.target.value) || 2))
-                                );
+                                const raw = e.target.value;
+                                const val =
+                                  raw === ''
+                                    ? 0
+                                    : Math.min(100, Math.max(0, Math.floor(Number(raw) || 0)));
                                 const updated = [...(siteDraft.groupDiscounts || [])];
                                 updated[idx] = { ...tier, minParticipants: val };
                                 setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                              }}
+                              onBlur={() => {
+                                if (tier.minParticipants < 2) {
+                                  const updated = [...(siteDraft.groupDiscounts || [])];
+                                  updated[idx] = { ...tier, minParticipants: 2 };
+                                  setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                                }
                               }}
                               className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded-lg tabular-nums"
                             />
@@ -3989,15 +4020,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               type="number"
                               min={1}
                               max={90}
-                              value={tier.discountPercent}
+                              value={tier.discountPercent || ''}
                               onChange={(e) => {
-                                const val = Math.min(
-                                  90,
-                                  Math.max(1, Math.round(Number(e.target.value) || 1))
-                                );
+                                const raw = e.target.value;
+                                const val =
+                                  raw === ''
+                                    ? 0
+                                    : Math.min(90, Math.max(0, Math.round(Number(raw) || 0)));
                                 const updated = [...(siteDraft.groupDiscounts || [])];
                                 updated[idx] = { ...tier, discountPercent: val };
                                 setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                              }}
+                              onBlur={() => {
+                                if (tier.discountPercent < 1) {
+                                  const updated = [...(siteDraft.groupDiscounts || [])];
+                                  updated[idx] = { ...tier, discountPercent: 1 };
+                                  setSiteDraft({ ...siteDraft, groupDiscounts: updated });
+                                }
                               }}
                               className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#E2DFD5] rounded-lg tabular-nums"
                             />
@@ -5055,14 +5094,33 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     type="number"
                     min={1}
                     max={30}
-                    value={editingTrip.durationDays}
+                    value={editingTrip.durationDays || ''}
                     onChange={(e) => {
-                      const d = Math.max(1, Number(e.target.value) || 1);
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setEditingTrip({
+                          ...editingTrip,
+                          durationDays: 0,
+                          durationLabel: '1 Hari',
+                        });
+                        return;
+                      }
+                      const d = Math.min(30, Math.max(0, Math.floor(Number(raw) || 0)));
+                      const safeD = Math.max(1, d);
                       setEditingTrip({
                         ...editingTrip,
                         durationDays: d,
-                        durationLabel: d > 1 ? `${d} Hari ${d - 1} Malam` : '1 Hari',
+                        durationLabel: safeD > 1 ? `${safeD} Hari ${safeD - 1} Malam` : '1 Hari',
                       });
+                    }}
+                    onBlur={() => {
+                      if (editingTrip.durationDays < 1) {
+                        setEditingTrip({
+                          ...editingTrip,
+                          durationDays: 1,
+                          durationLabel: '1 Hari',
+                        });
+                      }
                     }}
                     className="w-full px-3 py-2 text-sm bg-[#F6F5F0] border border-[#E2DFD5] rounded-lg tabular-nums"
                   />
