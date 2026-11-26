@@ -103,60 +103,123 @@ export default function App() {
 
   // 1. Test Firestore connectivity & track Firebase Auth readiness
   useEffect(() => {
-    testFirestoreConnection().catch(() => {});
+    console.info('[DexxDigital:App:AuthEffect] Initializing Firestore connectivity check & Firebase Auth listener', {
+      adminEmailConfigured: Boolean(ADMIN_EMAIL),
+    });
+
+    testFirestoreConnection()
+      .then(() => {
+        console.info('[DexxDigital:App:AuthEffect] Firestore connectivity test completed');
+      })
+      .catch((err) => {
+        console.warn('[DexxDigital:App:AuthEffect] Firestore connectivity test failed:', err);
+      });
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      console.info('[DexxDigital:App:AuthEffect] onAuthStateChanged fired:', {
+        authenticated: Boolean(user),
+        uid: user?.uid || null,
+        email: user?.email || null,
+        emailVerified: user?.emailVerified ?? false,
+      });
+
       setFirebaseUser(user);
       if (!user) {
         setIsFirebaseAdmin(false);
         setAuthReady(true);
+        console.info('[DexxDigital:App:AuthEffect] Auth ready (signed out)', {
+          authReady: true,
+          isFirebaseAdmin: false,
+        });
         return;
       }
 
       let adminOk = Boolean(user.emailVerified && user.email === ADMIN_EMAIL);
+      let verificationSource = adminOk ? 'email_allowlist' : 'none';
+
       if (!adminOk) {
         try {
+          console.info('[DexxDigital:App:AuthEffect] Checking Firestore admins collection for uid:', user.uid);
           const adminDoc = await getDoc(doc(db, 'admins', user.uid));
           adminOk = adminDoc.exists();
-        } catch {
+          if (adminOk) {
+            verificationSource = 'firestore_admins_doc';
+          }
+        } catch (err) {
+          console.warn('[DexxDigital:App:AuthEffect] Failed checking Firestore admins doc:', err);
           adminOk = false;
         }
       }
+
       setIsFirebaseAdmin(adminOk);
       setAuthReady(true);
+      console.info('[DexxDigital:App:AuthEffect] Auth ready (signed in)', {
+        authReady: true,
+        isFirebaseAdmin: adminOk,
+        verificationSource,
+      });
     });
 
-    return () => unsubAuth();
+    return () => {
+      console.info('[DexxDigital:App:AuthEffect] Cleaning up Firebase Auth listener');
+      unsubAuth();
+    };
   }, []);
 
   // 2. Load local fallback store + subscribe to real-time Cloud Firestore public collections
   useEffect(() => {
     let active = true;
+    console.info('[DexxDigital:App:StoreInitEffect] Starting /api/store fetch and Firestore public store subscription');
 
     fetch('/api/store')
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to load store');
+        console.info('[DexxDigital:App:StoreInitEffect] /api/store response received:', {
+          status: res.status,
+          ok: res.ok,
+        });
+        if (!res.ok) throw new Error(`Failed to load store (HTTP ${res.status})`);
         return res.json() as Promise<StoreDatabase>;
       })
       .then((data) => {
-        if (active) {
-          setStore((prev) => ({
-            ...prev,
-            ...data,
-            guides: mergeGuidesWithDefaults(data.guides || prev.guides),
-            siteContent: mergeSiteContent(INITIAL_STORE_DATA.siteContent, data.siteContent),
-          }));
+        if (!active) {
+          console.info('[DexxDigital:App:StoreInitEffect] Ignoring /api/store payload because effect unmounted');
+          return;
         }
+        console.info('[DexxDigital:App:StoreInitEffect] Applying /api/store data:', {
+          trips: data.trips?.length ?? 0,
+          guides: data.guides?.length ?? 0,
+          gallery: data.gallery?.length ?? 0,
+          testimonials: data.testimonials?.length ?? 0,
+        });
+        setStore((prev) => ({
+          ...prev,
+          ...data,
+          guides: mergeGuidesWithDefaults(data.guides || prev.guides),
+          siteContent: mergeSiteContent(INITIAL_STORE_DATA.siteContent, data.siteContent),
+        }));
       })
-      .catch(() => {
-        // Keep seeded initial data if server unavailable
+      .catch((err) => {
+        console.warn(
+          '[DexxDigital:App:StoreInitEffect] /api/store unavailable, keeping seeded initial data:',
+          err
+        );
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          console.info('[DexxDigital:App:StoreInitEffect] Initial loading state cleared (loading=false)');
+        }
       });
 
     const unsubPublic = subscribePublicFirestoreStore((patch) => {
       if (!active) return;
+      console.info('[DexxDigital:App:StoreInitEffect] Firestore public snapshot patch received:', {
+        updatedKeys: Object.keys(patch),
+        trips: patch.trips?.length,
+        guides: patch.guides?.length,
+        gallery: patch.gallery?.length,
+        testimonials: patch.testimonials?.length,
+      });
       setStore((prev) => ({
         ...prev,
         ...(patch.trips ? { trips: patch.trips } : {}),
@@ -176,6 +239,7 @@ export default function App() {
     });
 
     return () => {
+      console.info('[DexxDigital:App:StoreInitEffect] Unsubscribing Firestore public store listeners');
       active = false;
       unsubPublic();
     };
@@ -183,24 +247,40 @@ export default function App() {
 
   // 3. Auto-seed Firestore if empty once admin signs in with Google + listen to protected leads
   useEffect(() => {
-    if (!authReady || !isFirebaseAdmin) return;
+    console.info('[DexxDigital:App:AdminSyncEffect] Evaluating admin Firestore sync readiness:', {
+      authReady,
+      isFirebaseAdmin,
+    });
+    if (!authReady || !isFirebaseAdmin) {
+      return;
+    }
 
     let active = true;
     isFirestoreStoreSeeded()
       .then(async (seeded) => {
+        console.info('[DexxDigital:App:AdminSyncEffect] Firestore seed check complete:', { seeded, active });
         if (active && !seeded) {
+          console.info('[DexxDigital:App:AdminSyncEffect] Firestore empty; auto-seeding initial store...');
           await seedStoreToFirestore(storeRef.current);
+          console.info('[DexxDigital:App:AdminSyncEffect] Auto-seed completed successfully');
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('[DexxDigital:App:AdminSyncEffect] Firestore seed check/auto-seed failed:', err);
+      });
 
+    console.info('[DexxDigital:App:AdminSyncEffect] Subscribing to protected Firestore leads collection');
     const unsubLeads = subscribeLeadsFromFirestore((leads) => {
       if (active) {
+        console.info('[DexxDigital:App:AdminSyncEffect] Protected leads snapshot updated:', {
+          leadsCount: leads.length,
+        });
         setStore((prev) => ({ ...prev, leads }));
       }
     });
 
     return () => {
+      console.info('[DexxDigital:App:AdminSyncEffect] Unsubscribing protected leads listener');
       active = false;
       unsubLeads();
     };
@@ -208,7 +288,9 @@ export default function App() {
 
   useEffect(() => {
     if (store.siteContent.brandName) {
-      document.title = `${store.siteContent.brandName} — Open Trip & Tour Operator Nusantara`;
+      const nextTitle = `${store.siteContent.brandName} — Open Trip & Tour Operator Nusantara`;
+      document.title = nextTitle;
+      console.info('[DexxDigital:App:BrandingEffect] Document title synced:', nextTitle);
     }
   }, [store.siteContent.brandName]);
 
@@ -228,6 +310,10 @@ export default function App() {
       link.href = iconHref;
       document.head.appendChild(link);
     }
+    console.info('[DexxDigital:App:FaviconEffect] Browser favicon synced:', {
+      iconHref,
+      updatedExistingLinks: links.length,
+    });
   }, [store.siteContent.brandLogoUrl]);
 
   // Hidden desktop shortcut: Ctrl + Shift + 89 (supports simultaneous 8+9 or sequential 8 then 9)
@@ -235,6 +321,7 @@ export default function App() {
   const lastDigit8AtRef = useRef<number>(0);
 
   useEffect(() => {
+    console.info('[DexxDigital:App:ShortcutEffect] Registering Ctrl+Shift+89 admin shortcut listeners');
     const isEightKey = (e: KeyboardEvent) =>
       e.code === 'Digit8' || e.key === '8' || e.key === '*';
     const isNineKey = (e: KeyboardEvent) =>
@@ -260,6 +347,7 @@ export default function App() {
           e.preventDefault();
           lastDigit8AtRef.current = 0;
           pressedKeysRef.current.clear();
+          console.info('[DexxDigital:App:ShortcutEffect] Hidden admin shortcut activated, navigating to admin view');
           setCurrentView('admin');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -277,6 +365,7 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     return () => {
+      console.info('[DexxDigital:App:ShortcutEffect] Removing admin shortcut listeners');
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
